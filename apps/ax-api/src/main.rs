@@ -1,5 +1,6 @@
 use apolo_ax_scheduler::AxScheduler;
 use argon2::{password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString}, Argon2};
+use aes_gcm::{aead::{Aead, KeyInit}, Aes256Gcm, Nonce};
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
@@ -58,6 +59,27 @@ async fn nodes(State(state): State<AppState>) -> Result<Json<Vec<apolo_ax_core::
 }
 fn database(state: &AppState) -> Result<&PgPool, StatusCode> { state.database.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE) }
 fn hash_token(token: &str) -> String { format!("{:x}", Sha256::digest(token.as_bytes())) }
+fn token_cipher() -> Result<Aes256Gcm, StatusCode> {
+    let secret = env::var("APOLO_TOKEN_ENCRYPTION_KEY").map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    if secret.len() < 32 { return Err(StatusCode::SERVICE_UNAVAILABLE); }
+    let key = Sha256::digest(secret.as_bytes());
+    Aes256Gcm::new_from_slice(&key).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+fn encrypt_token(token: &str) -> Result<Vec<u8>, StatusCode> {
+    let cipher = token_cipher()?;
+    let mut nonce = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce);
+    let encrypted = cipher.encrypt(Nonce::from_slice(&nonce), token.as_bytes())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok([nonce.as_slice(), encrypted.as_slice()].concat())
+}
+fn decrypt_token(payload: &[u8]) -> Result<String, StatusCode> {
+    if payload.len() <= 12 { return Err(StatusCode::INTERNAL_SERVER_ERROR); }
+    let cipher = token_cipher()?;
+    let plain = cipher.decrypt(Nonce::from_slice(&payload[..12]), &payload[12..])
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    String::from_utf8(plain).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
 fn random_token(prefix: &str) -> String {
     let mut bytes = [0u8; 32]; OsRng.fill_bytes(&mut bytes);
     format!("{prefix}{}", bytes.iter().map(|b| format!("{b:02x}")).collect::<String>())
@@ -102,10 +124,22 @@ async fn create_api_token(State(state): State<AppState>, headers: HeaderMap, Jso
     if name.is_empty() || name.len() > 120 { return Err(StatusCode::BAD_REQUEST); }
     let token = random_token("apolo_");
     let prefix = token.chars().take(18).collect::<String>();
-    sqlx::query("INSERT INTO api_tokens (user_id,name,token_hash,token_prefix) VALUES ($1,$2,$3,$4)")
-        .bind(user_id).bind(name).bind(hash_token(&token)).bind(&prefix)
+    let ciphertext = encrypt_token(&token)?;
+    sqlx::query("INSERT INTO api_tokens (user_id,name,token_hash,token_prefix,token_ciphertext) VALUES ($1,$2,$3,$4,$5)")
+        .bind(user_id).bind(name).bind(hash_token(&token)).bind(&prefix).bind(ciphertext)
         .execute(db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok((StatusCode::CREATED, Json(CreatedToken { token, name:name.to_string(), prefix, warning:"Copie agora: o token completo não será exibido novamente." })))
+    Ok((StatusCode::CREATED, Json(CreatedToken { token, name:name.to_string(), prefix, warning:"Token protegido e associado à sua conta." })))
+}
+async fn get_active_api_token(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
+    let db = database(&state)?;
+    let user_id = authorize_session(db, &headers).await?;
+    let row = sqlx::query_as::<_, (String, Option<Vec<u8>>)>(
+        "SELECT name,token_ciphertext FROM api_tokens WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1")
+        .bind(user_id).fetch_optional(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    match row {
+        Some((name, Some(ciphertext))) => Ok(Json(serde_json::json!({"name":name,"token":decrypt_token(&ciphertext)?}))),
+        _ => Err(StatusCode::NOT_FOUND)
+    }
 }
 async fn authorize_session(db: &PgPool, headers: &HeaderMap) -> Result<uuid::Uuid, StatusCode> {
     let supplied = bearer(headers)?;
@@ -160,7 +194,7 @@ fn app(state:AppState)->Router{
     Router::new().route("/",get(dashboard)).route("/healthz",get(health))
         .route("/api/v1/overview",get(overview)).route("/api/v1/nodes",get(nodes))
         .route("/api/v1/auth/register",post(register)).route("/api/v1/auth/login",post(login))
-        .route("/api/v1/tokens",post(create_api_token))
+        .route("/api/v1/tokens",post(create_api_token).get(get_active_api_token))
         .route("/api/v1/projects",get(list_projects).post(create_project))
         .route("/api/v1/projects/{project_id}",delete(delete_project)).with_state(state)
 }
