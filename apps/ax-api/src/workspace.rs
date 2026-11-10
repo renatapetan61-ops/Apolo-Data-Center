@@ -294,11 +294,11 @@ async fn vta_plan(State(s):State<AppState>,headers:HeaderMap,Query(q):Query<VtaP
  let ram_free:i128=workers.iter().filter(|w|w.gpu_free_memory_bytes.unwrap_or(0)==0).map(|w|w.ram_available_bytes.unwrap_or(0) as i128).sum();
  let limit=if !gpu.is_empty(){(gpu_free as f64*0.65/16.0) as i128}else{(ram_free as f64*0.35/16.0) as i128};
  let requested=q.parameters.trim().to_lowercase();
- let impossible=requested.contains("googolplex")||requested.contains("centilh")||requested.contains("centillion");
+ let impossible=requested.contains("googolplex")||requested.contains("centilh")||requested.contains("centillion")||requested.contains("novemdecillion")||requested.contains("novemdecilhao")||requested.contains("novemdecilhão");
  let parsed=requested.replace('_',"").replace(",","").parse::<i128>().ok();
  let feasible=if impossible{Some(false)}else{parsed.map(|n|n>0&&n<=limit&&limit>0)};
  let reason=if impossible{"A escala solicitada ultrapassa qualquer capacidade física concebível."}
- else if parsed.is_none(){"Informe um número inteiro de parâmetros ou o termo googolplex/centilhão."}
+ else if parsed.is_none(){"Informe um número inteiro de parâmetros ou o termo googolplex/centilhão/novemdecillion."}
  else if feasible==Some(true){"Estimativa de memória compatível com o inventário online; execução ainda exige runtime, dataset e validação."}
  else {"Memória estimada insuficiente nos workers online."};
  Ok(Json(serde_json::json!({
