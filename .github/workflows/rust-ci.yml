@@ -1,4 +1,4 @@
-name: Rust CI
+name: APOLO Toolchain and Rust CI
 on:
   push:
     branches: [main]
@@ -7,16 +7,44 @@ on:
 permissions:
   contents: read
 jobs:
+  toolchain-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python toolchain
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Go toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+      - name: Install Java toolchain
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Verify language toolchains
+        run: |
+          python --version
+          go version
+          java -version
+          javac -version
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust, Cargo, rustfmt and Clippy
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Verify Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
       - name: Format Rust sources
-        run: cargo fmt --all
+        run: cargo fmt --all -- --check
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Run tests
