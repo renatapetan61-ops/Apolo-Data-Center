@@ -310,7 +310,7 @@ async fn vta_plan(State(s):State<AppState>,headers:HeaderMap,Query(q):Query<VtaP
   "warning":"Planejamento não equivale a benchmark nem cria FLOPS/VRAM. O worker AX atual ainda é single-rank."
  })))
 }
-\nasync fn list_workers(State(s):State<AppState>,headers:HeaderMap)->Result<Json<Vec<WorkerRow>>,StatusCode>{
+async fn list_workers(State(s):State<AppState>,headers:HeaderMap)->Result<Json<Vec<WorkerRow>>,StatusCode>{
  let owner=authorize(&s,&headers).await?;
  let rows=sqlx::query_as::<_,WorkerRow>("SELECT id,name,cpu_cores,ram_bytes,ram_available_bytes,gpu_name,gpu_memory_bytes,gpu_free_memory_bytes,cpu_utilization_pct,gpu_utilization_pct,accelerator_kind,compute_capability,network_bandwidth_mbps,framework,status,last_seen_at FROM ax_workers WHERE ($1::uuid IS NULL OR user_id=$1) ORDER BY last_seen_at DESC NULLS LAST")
  .bind(owner).fetch_all(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
