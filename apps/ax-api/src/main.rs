@@ -203,8 +203,8 @@ mod tests{
         let response=app(state).oneshot(Request::builder().uri("/api/v1/projects").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(response.status(),StatusCode::UNAUTHORIZED);
     }
-    #[tokio::test] async fn projects_require_authentication_before_database_access(){
+    #[tokio::test] async fn projects_reject_missing_bearer_token_when_database_is_unconfigured(){
         let response=app(test_state()).oneshot(Request::builder().uri("/api/v1/projects").body(Body::empty()).unwrap()).await.unwrap();
-        assert_eq!(response.status(),StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status(),StatusCode::UNAUTHORIZED);
     }
 }
