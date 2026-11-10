@@ -69,7 +69,11 @@ internal fun CreateTokenScreen(
     var label by remember { mutableStateOf("Meu token do aplicativo") }
     val clipboard = LocalClipboardManager.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        TextButton(onClick = onBack) { Text("‹ Voltar para Projetos") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Text("→", color = Color(0xFFEAF1FC), fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         Text("SEGURANÇA / API", color = Color(0xFF78A9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
         Text("Criar Token", color = Color(0xFFEAF1FC), fontSize = 27.sp, fontWeight = FontWeight.Bold)
         Text("Gere uma credencial individual para conectar seus aplicativos à API APOLO.", color = Color(0xFF9BAEC8), fontSize = 13.sp)
