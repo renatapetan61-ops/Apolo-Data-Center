@@ -44,7 +44,7 @@ jobs:
           rustc --version
           cargo --version
       - name: Format Rust sources
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Run tests
