@@ -110,6 +110,7 @@ class MainActivity : ComponentActivity() {
                                     "CHAT" -> ApiClient.askKimi(endpoint,token,projectId,payload.substringBefore("\n"))
                                     "MODEL" -> { val rest=payload.substringAfter("\n"); ApiClient.generateModel(endpoint,token,projectId,payload.substringBefore("\n"),rest.substringBefore("\n").toLongOrNull() ?: 0L,rest.substringAfter("\n","")) }
                                     "TRAIN" -> ApiClient.startTraining(endpoint,token,projectId,payload)
+                                    "VTA" -> ApiClient.vtaPlan(endpoint,token,payload)
                                     else -> error("Ação desconhecida.")
                                 }
                             }
