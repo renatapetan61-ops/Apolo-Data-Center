@@ -212,6 +212,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn projects_reject_missing_bearer_token() {
+        let state = AppState {
+            scheduler: Arc::new(AxScheduler::new()),
+            database: None,
+            api_token: Some("0123456789abcdef0123456789abcdef".into()),
+        };
+        let response = app(state).oneshot(
+            Request::builder().uri("/api/v1/projects").body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn projects_reject_incorrect_bearer_token() {
+        let state = AppState {
+            scheduler: Arc::new(AxScheduler::new()),
+            database: None,
+            api_token: Some("0123456789abcdef0123456789abcdef".into()),
+        };
+        let response = app(state).oneshot(
+            Request::builder()
+                .uri("/api/v1/projects")
+                .header(axum::http::header::AUTHORIZATION, "Bearer incorrect-token")
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
     async fn projects_require_authentication_before_database_access() {
         let response = app(test_state()).oneshot(
             Request::builder().uri("/api/v1/projects").body(Body::empty()).unwrap()
