@@ -1,0 +1,15 @@
+name: APOLO Container Build
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build-api-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API container
+        run: docker build -f infrastructure/Dockerfile.api -t apolo-ax-api:ci .
