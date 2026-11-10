@@ -21,6 +21,11 @@ pub enum AxRuntimeError {
     UnsupportedOperation(AxOpcode),
 }
 
+fn read_register(registers: &[u64], sources: &[u16], index: usize) -> Result<u64, AxRuntimeError> {
+    let register = *sources.get(index).ok_or(AxRuntimeError::InvalidInstructionShape)?;
+    registers.get(usize::from(register)).copied().ok_or(AxRuntimeError::InvalidInstructionShape)
+}
+
 pub fn execute_reference(
     program: &AxProgram,
     memory: &mut [u8],
@@ -38,12 +43,6 @@ pub fn execute_reference(
     for instruction in &program.instructions {
         let dst = instruction.dst.map(usize::from);
         let src = &instruction.src;
-        let read = |index: usize| -> Result<u64, AxRuntimeError> {
-            let register = *src.get(index).ok_or(AxRuntimeError::InvalidInstructionShape)?;
-            registers.get(usize::from(register)).copied()
-                .ok_or(AxRuntimeError::InvalidInstructionShape)
-        };
-
         match instruction.opcode {
             AxOpcode::Nop | AxOpcode::Barrier => {
                 if dst.is_some() || !src.is_empty() {
@@ -64,7 +63,7 @@ pub fn execute_reference(
             }
             AxOpcode::Store => {
                 if dst.is_some() { return Err(AxRuntimeError::InvalidInstructionShape); }
-                let value = read(0)?;
+                let value = read_register(&registers, src, 0)?;
                 let offset = instruction.address_offset.ok_or(AxRuntimeError::InvalidInstructionShape)? as usize;
                 let width = instruction.access_bytes.ok_or(AxRuntimeError::InvalidInstructionShape)?;
                 if !matches!(width, 1 | 2 | 4 | 8) {
@@ -75,7 +74,7 @@ pub fn execute_reference(
             }
             AxOpcode::Add | AxOpcode::DotProduct => {
                 let target = dst.ok_or(AxRuntimeError::InvalidInstructionShape)?;
-                registers[target] = read(0)?.wrapping_add(read(1)?);
+                registers[target] = read(0)?.wrapping_add(read_register(&registers, src, 1)?);
             }
             AxOpcode::Multiply => {
                 let target = dst.ok_or(AxRuntimeError::InvalidInstructionShape)?;
@@ -83,7 +82,7 @@ pub fn execute_reference(
             }
             AxOpcode::FusedMultiplyAdd => {
                 let target = dst.ok_or(AxRuntimeError::InvalidInstructionShape)?;
-                registers[target] = read(0)?.wrapping_mul(read(1)?).wrapping_add(read(2)?);
+                registers[target] = read(0)?.wrapping_mul(read(1)?).wrapping_add(read_register(&registers, src, 2)?);
             }
             AxOpcode::Relu => {
                 let target = dst.ok_or(AxRuntimeError::InvalidInstructionShape)?;
