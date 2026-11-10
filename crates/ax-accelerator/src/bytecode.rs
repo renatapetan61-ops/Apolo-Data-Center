@@ -1,7 +1,7 @@
 //! Experimental AX bytecode container (little-endian, v0 format).
 //! The wire format is not ABI-frozen and must not be used as a stable external contract.
 
-use crate::{AxInstruction, AxOpcode, AxProgram, AX_ISA_MAJOR, AX_ISA_MINOR};
+use crate::{AxInstruction, AxOpcode, AxProgram};
 
 const MAGIC: &[u8; 4] = b"AXBC";
 const MAX_BYTECODE_BYTES: usize = 64 * 1024 * 1024;
