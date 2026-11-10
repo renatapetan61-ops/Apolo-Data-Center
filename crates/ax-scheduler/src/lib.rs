@@ -74,6 +74,11 @@ impl AxScheduler {
             || inventory.storage_used_bytes.as_bytes()
                 .saturating_add(inventory.storage_reserved_bytes.as_bytes())
                 .saturating_add(usage.storage_bytes) > inventory.storage_total_bytes.as_bytes()
+            || usage.accelerator_ids.iter().any(|reserved_id| {
+                !inventory.accelerators.iter().any(|device| {
+                    device.id == *reserved_id && device.is_schedulable()
+                })
+            })
         {
             return Err(SchedulerError::InvalidRequest("updated inventory conflicts with active reservations"));
         }
@@ -115,7 +120,7 @@ impl AxScheduler {
             if node.cpu_cores.saturating_sub(cpu_used) < request.cpu_cores
                 || node.memory_total_bytes.as_bytes().saturating_sub(mem_used) < request.memory_bytes.as_bytes()
                 || node.storage_total_bytes.as_bytes().saturating_sub(storage_used) < request.storage_bytes.as_bytes()
-                || node.network_mbps < request.network_mbps
+                || node.network_mbps.saturating_sub(usage.network_mbps) < request.network_mbps
             { continue; }
 
             let mut accelerator_ids = Vec::new();
@@ -139,10 +144,14 @@ impl AxScheduler {
         let (_, _, node_id, accelerator_ids) = candidates.into_iter().next().ok_or(SchedulerError::NoCapacity)?;
 
         let usage = state.usage.entry(node_id.clone()).or_default();
-        usage.cpu_cores = usage.cpu_cores.checked_add(request.cpu_cores).ok_or(SchedulerError::CapacityOverflow)?;
-        usage.memory_bytes = usage.memory_bytes.checked_add(request.memory_bytes.as_bytes()).ok_or(SchedulerError::CapacityOverflow)?;
-        usage.storage_bytes = usage.storage_bytes.checked_add(request.storage_bytes.as_bytes()).ok_or(SchedulerError::CapacityOverflow)?;
-        usage.network_mbps = usage.network_mbps.checked_add(request.network_mbps).ok_or(SchedulerError::CapacityOverflow)?;
+        let next_cpu = usage.cpu_cores.checked_add(request.cpu_cores).ok_or(SchedulerError::CapacityOverflow)?;
+        let next_memory = usage.memory_bytes.checked_add(request.memory_bytes.as_bytes()).ok_or(SchedulerError::CapacityOverflow)?;
+        let next_storage = usage.storage_bytes.checked_add(request.storage_bytes.as_bytes()).ok_or(SchedulerError::CapacityOverflow)?;
+        let next_network = usage.network_mbps.checked_add(request.network_mbps).ok_or(SchedulerError::CapacityOverflow)?;
+        usage.cpu_cores = next_cpu;
+        usage.memory_bytes = next_memory;
+        usage.storage_bytes = next_storage;
+        usage.network_mbps = next_network;
         usage.accelerator_ids.extend(accelerator_ids.iter().copied());
 
         let reservation = Reservation {
@@ -160,7 +169,7 @@ impl AxScheduler {
 
     pub fn release(&self, reservation_id: &str) -> SchedulerResult<Reservation> {
         let mut state = self.state.lock().map_err(|_| SchedulerError::LockPoisoned)?;
-        let reservation = state.reservations.remove(reservation_id)
+        let reservation = state.reservations.get(reservation_id).cloned()
             .ok_or_else(|| SchedulerError::ReservationNotFound(reservation_id.into()))?;
         let usage = state.usage.get_mut(&reservation.node_id).ok_or(SchedulerError::InvalidRequest("reservation node usage is missing"))?;
         usage.cpu_cores = usage.cpu_cores.saturating_sub(reservation.request.cpu_cores);
@@ -168,6 +177,7 @@ impl AxScheduler {
         usage.storage_bytes = usage.storage_bytes.saturating_sub(reservation.request.storage_bytes.as_bytes());
         usage.network_mbps = usage.network_mbps.saturating_sub(reservation.request.network_mbps);
         for id in &reservation.accelerator_ids { usage.accelerator_ids.remove(id); }
+        state.reservations.remove(reservation_id);
         state.jobs.remove(&reservation.job_id);
         Ok(reservation)
     }
