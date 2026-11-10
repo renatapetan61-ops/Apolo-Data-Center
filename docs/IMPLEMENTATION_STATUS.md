@@ -165,3 +165,22 @@ Documentação: `docs/accelerators/ax-architecture.md`.
 
 ## Próxima etapa de infraestrutura
 Fase 8 permanece: canal de controle HTTPS/mTLS, identidade criptográfica e persistência transacional de agentes/leases. A linha AX Accelerator avança em paralelo para especificação binária e referência funcional antes do RTL.
+
+
+## AX Accelerator — Reference Runtime (incremento seguinte)
+
+Status: interpretador funcional inicial em software; validação CI deste incremento pendente.
+
+Implementado:
+- Módulo `reference_runtime` executa sequencialmente programas AX validados em CPU comum.
+- Registradores de 64 bits e LOAD/STORE little-endian de 1, 2, 4 ou 8 bytes.
+- ADD, MULTIPLY, FMA, RELU e DOT PRODUCT escalar com semântica inteira definida.
+- NOP e BARRIER como operações sem efeito no modelo sequencial.
+- Limite explícito de instruções e validação do tamanho do buffer de memória.
+- MATRIX MULTIPLY TILE retorna erro explícito de operação não implementada.
+
+Limites:
+- É uma implementação de referência em CPU, não execução em hardware AX.
+- Não há métricas de desempenho, paralelismo físico, compilador, ABI congelada, formato binário, driver ou RTL.
+- DOT PRODUCT ainda é escalar; semântica vetorial/acumulada e operações matriciais precisam de especificação.
+- O interpretador não é sandbox para programas hostis.
