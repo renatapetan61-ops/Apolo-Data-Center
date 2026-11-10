@@ -184,3 +184,16 @@ Limites:
 - Não há métricas de desempenho, paralelismo físico, compilador, ABI congelada, formato binário, driver ou RTL.
 - DOT PRODUCT ainda é escalar; semântica vetorial/acumulada e operações matriciais precisam de especificação.
 - O interpretador não é sandbox para programas hostis.
+
+## AX Accelerator — Bytecode container experimental v0
+
+Status: encoder/decoder binário implementados; validação CI pendente.
+
+Implementado:
+- Cabeçalho `AXBC`, campos little-endian e versão ISA.
+- Codificação/decodificação de instruções e operandos.
+- Limites de 64 MiB e 1.000.000 instruções.
+- Rejeição de magic inválido, opcode desconhecido, truncamento, operandos inválidos e bytes excedentes.
+- Cinco testes de round-trip e entradas malformadas.
+
+Limites: formato experimental, sem ABI congelada, relocations, símbolos, debug info, assinatura ou garantia de compatibilidade futura.
