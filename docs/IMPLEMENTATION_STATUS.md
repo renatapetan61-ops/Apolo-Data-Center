@@ -261,3 +261,11 @@ Limitações ainda abertas:
 - Endpoints de storage, ingestion e compute ainda não foram expostos ao app.
 - Redis e MinIO continuam sem integração ao runtime; TLS de produção e agentes remotos ainda faltam.
 - APK Debug/Release foram compilados com sucesso pelo workflow Android anterior (run 42834002555); mudanças futuras no app devem disparar nova validação.
+
+## Aplicativo Android — integração de projetos e credenciais
+
+- Tela Kotlin/Compose de Projetos conectada aos endpoints autenticados de listar, criar e excluir projetos.
+- Cliente HTTP Android com timeouts, HTTPS obrigatório para hosts remotos e tratamento de respostas 401/404/503.
+- Token Bearer salvo com AES-GCM; a chave AES é gerada e mantida no Android Keystore, sem gravar o token em texto puro nas preferências.
+- Tela Ajustes permite configurar endpoint e token; operações de projetos exigem token de pelo menos 32 caracteres.
+- Build Android para esta integração em validação no workflow CI; não considerar APK atualizado aprovado até o job terminar.
