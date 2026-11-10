@@ -16,6 +16,7 @@ internal enum class ProjectAction { LOAD, CREATE, DELETE }
 
 @Composable
 internal fun ProjectsScreen(
+    modifier: Modifier = Modifier,
     endpoint: String,
     token: String,
     onAction: (ProjectAction, String, String, String, (Result<List<ProjectInfo>>) -> Unit) -> Unit
@@ -49,7 +50,7 @@ internal fun ProjectsScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
