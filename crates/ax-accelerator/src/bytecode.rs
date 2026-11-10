@@ -101,6 +101,7 @@ pub fn decode(bytes: &[u8]) -> Result<AxProgram, AxBytecodeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{AX_ISA_MAJOR, AX_ISA_MINOR};
 
     fn sample() -> AxProgram {
         AxProgram {
