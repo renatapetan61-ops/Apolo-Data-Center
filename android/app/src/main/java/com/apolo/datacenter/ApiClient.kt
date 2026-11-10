@@ -123,9 +123,9 @@ object ApiClient {
                     400 -> "Confira os dados. A senha deve ter pelo menos 10 caracteres."
                     401 -> "E-mail, senha ou token inválido."
                     404 -> "Recurso não encontrado."
-                    409 -> "Este e-mail já possui cadastro."
-                    503 -> "O servidor ainda não está configurado com PostgreSQL. O cadastro/login precisa do banco de dados."
-                    else -> "Servidor respondeu HTTP $code."
+                    409 -> "Operação bloqueada: confira e-mail duplicado, dataset enviado e worker AX online."
+                    503 -> "Serviço indisponível: confira PostgreSQL, volume APOLO_STORAGE_DIR e o secret NVIDIA_NIM_API_KEY."
+                    502 -> "Integração NVIDIA NIM indisponível ou resposta inválida."\n                    413 -> "Solicitação excede o limite de tamanho ou de parâmetros suportado."\n                    else -> "Servidor respondeu HTTP $code."
                 }
             }
             return response
