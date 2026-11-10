@@ -38,3 +38,9 @@ A estimativa inicial usa 16 bytes por parâmetro para pesos BF16, gradientes e e
 5. Benchmarks reproduzíveis contra uma TPU/cluster de referência. Só então divulgar números de velocidade.
 
 **Limite físico:** nenhum runtime torna treinável um modelo de 100 googolplex ou um centilhão de parâmetros. A VTA deve rejeitar esse pedido antes de reservar recursos ou iniciar jobs.
+
+## Pedido de 100 novemdecillion de parâmetros
+
+Na escala curta usada nos Estados Unidos, 1 novemdecillion = 10^60; portanto, 100 novemdecillion = 10^62 parâmetros. Na escala longa o nome tem outro valor, mas a conclusão física continua sendo inviabilidade absoluta. Somente os pesos em BF16 ocupariam aproximadamente 2 × 10^62 bytes. Uma estimativa simplificada de treinamento BF16 + gradientes + estados AdamW (16 bytes/parâmetro, sem contar ativações e buffers) chega a cerca de 1,6 × 10^63 bytes. Nenhuma VPU virtual pode materializar esse armazenamento ou criar a largura de banda e os FLOPS correspondentes.
+
+A VTA reconhece explicitamente "100 novemdecillion" no planejador local e no endpoint /api/v1/vta/plan, recusando o plano antes de reservar workers ou criar jobs. Isso é um limite honesto de capacidade, não uma limitação arbitrária do produto.
