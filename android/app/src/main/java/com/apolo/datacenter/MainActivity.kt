@@ -398,15 +398,6 @@ private fun HomeScreen(
         item { ModuleCard("Armazenamento", "Dados, objetos e ingestão", "▤") { onOpen(AppTab.STORAGE) } }
         item { ModuleCard("Computação", "Scheduler, jobs e AX Accelerator", "◈") { onOpen(AppTab.COMPUTE) } }
         item { ModuleCard("Projetos de IA", "Datasets e treinamento de modelos", "▦") { onOpen(AppTab.PROJECTS) } }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = PanelAlt), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text("CAPACIDADE VERIFICADA", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text("Nenhuma capacidade é presumida.", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                    Text("CPU, RAM, discos e aceleradores só serão exibidos após inventário real e verificação independente.", color = TextMuted, fontSize = 12.sp)
-                }
-            }
-        }
         if (snapshot != null) {
             item { Text("NÓS DO CLUSTER", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp) }
             items(snapshot.nodes) { node ->
@@ -464,15 +455,6 @@ private fun CapabilityScreen(modifier: Modifier, title: String, subtitle: String
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("◇", color = Accent, fontSize = 19.sp)
                     Text(capability, color = TextPrimary, modifier = Modifier.padding(start = 12.dp), fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = PanelAlt), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text("STATUS DE IMPLEMENTAÇÃO", color = Warning, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text("Integração em andamento", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                    Text(limitation, color = TextMuted, fontSize = 12.sp, lineHeight = 18.sp)
                 }
             }
         }
