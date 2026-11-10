@@ -24,39 +24,52 @@ Implementado:
 Status: primeira implementacao local funcional; distribuicao e persistencia transacional pendentes.
 
 Implementado:
-- Contrato ObjectStore.
-- Adapter LocalFsObjectStore para desenvolvimento/testes.
+- Contrato ObjectStore e adapter LocalFsObjectStore.
 - Fragmentacao de objetos em blocos.
 - Manifesto JSON com metadados, tamanhos e SHA-256 por bloco e objeto.
 - Reconstrucao e verificacao de integridade na leitura.
 - Quota local em memoria por instancia de StorageEngine.
-- Escrita atomica de cada arquivo temporario via rename.
+- Escrita atomica de arquivos individuais via rename.
 - Exclusao de objetos e liberacao do contador local.
-- Testes de escrita/leitura, fragmentacao, quota e exclusao.
 
-Pendencias da Fase 3:
-- Adapter S3/MinIO real.
-- Persistencia de metadados e cotas no PostgreSQL.
-- Contabilidade atomica multi-instancia.
-- Replicacao entre nos, erasure coding e reparo automatico.
-- Criptografia em repouso com KMS/gerenciamento de chaves.
-- Versionamento, retencao e lifecycle policies.
+Pendencias:
+- Adapter S3/MinIO real, metadados PostgreSQL e contabilidade atomica multi-instancia.
+- Replicacao, erasure coding, reparo automatico, KMS, versionamento e retencao.
 - Upload multipart/resumivel e streaming sem carregar todo objeto na RAM.
 
+## Fase 4 — AX Data Ingestion
+Status: pipeline local inicial implementado e validado em CI.
+
+Implementado:
+- Deteccao de JSON, JSONL/NDJSON, CSV, TXT/Markdown, PDF, DOCX, imagens, audio e video pela extensao.
+- Validacao basica de JSON/JSONL, CSV, UTF-8 e assinaturas conhecidas de PDF, DOCX, PNG, JPEG e WebP.
+- Limite configuravel de bytes por entrada.
+- Fila limitada com retorno explicito QueueFull para backpressure.
+- Deduplicacao SHA-256 por projeto.
+- Limite deslizante de entradas por hora por projeto.
+- Ordem temporal por projeto para rejeitar timestamp retrocedente.
+- Dequeue e metricas de profundidade da fila.
+
+Pendencias:
+- Fila duravel/distribuida, persistencia de deduplicacao e recuperacao apos restart.
+- Validacao profunda de PDF/DOCX, antivirus/sandbox, OCR, transcodificacao e parsers de audio/video.
+- Validacao estrita do MIME type e limites por bytes agregados/tenant.
+- Persistencia de metadados e entrega direta ao AX Storage.
+
 ## Limites e garantias
-- O adapter local nao e armazenamento distribuido nem pronto para producao.
-- A quota atual e por instancia em memoria e reinicia junto com o processo.
-- O manifesto e escrito por ultimo, mas nao ha transacao distribuida com o banco.
-- Nenhuma capacidade fisica e provisionada ou anunciada por este modulo.
-- A verificacao de integridade detecta alteracoes, mas nao substitui replicacao/backups.
+- Storage atual e local, nao distribuido; quotas sao locais a uma instancia.
+- Ingestion atual mantem payloads e dedupe em memoria; restart perde fila e historico.
+- Queue capacity e compartilhada por instancia; rate limit e por projeto.
+- Audio/video passam apenas por verificacao basica de payload nao vazio; nao ha decodificacao de codec.
+- Nenhum hardware fisico, GPU, throughput ou capacidade de cluster e provisionado por estes modulos.
 
 ## Validacao automatizada
 GitHub Actions executado com sucesso:
-- Rust formatter: executado.
-- Clippy: aprovado sem warnings tratados como erros.
-- Testes: 15 testes AX Core + 4 testes AX Storage aprovados (19 no total).
+- Rust formatter executado.
+- Clippy aprovado com `-D warnings`.
+- 25 testes unitarios aprovados: 15 AX Core, 4 AX Storage e 6 AX Ingestion.
 
-Execucao: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42822472685
+Execucao: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42822969708
 
 ## Proxima etapa
-Fase 4 — AX Data Ingestion: pipeline de recepcao, validacao de formatos, limites, deduplicacao, fila e backpressure. A integracao persistente com PostgreSQL e object storage sera desenvolvida em etapas seguintes.
+Fase 5 — AX Scheduler: planejamento de colocacao, requisitos de jobs, selecao de nos verificados e reservas atomicas com persistencia transacional. O metodo `NodeInventory::can_satisfy` atual e somente pre-validacao; nao reserva recursos nem evita dupla alocacao.
