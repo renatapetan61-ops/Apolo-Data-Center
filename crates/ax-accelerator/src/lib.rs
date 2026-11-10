@@ -98,15 +98,17 @@ impl AxProgram {
                 }
             }
 
-            let expected_sources = match instruction.opcode {
-                AxOpcode::Nop | AxOpcode::Barrier => 0,
-                AxOpcode::Load => 0,
-                AxOpcode::Store | AxOpcode::Relu => 1,
-                AxOpcode::Add | AxOpcode::Multiply | AxOpcode::DotProduct => 2,
-                AxOpcode::FusedMultiplyAdd => 3,
-                AxOpcode::MatrixMultiplyTile => 3,
+            let (expected_sources, destination_required) = match instruction.opcode {
+                AxOpcode::Nop | AxOpcode::Barrier => (0, false),
+                AxOpcode::Load => (0, true),
+                AxOpcode::Store => (1, false),
+                AxOpcode::Relu => (1, true),
+                AxOpcode::Add | AxOpcode::Multiply | AxOpcode::DotProduct => (2, true),
+                AxOpcode::FusedMultiplyAdd | AxOpcode::MatrixMultiplyTile => (3, true),
             };
-            if instruction.src.len() != expected_sources {
+            if instruction.src.len() != expected_sources
+                || instruction.dst.is_some() != destination_required
+            {
                 return Err(AxIsaError::InvalidOperandCount);
             }
 
