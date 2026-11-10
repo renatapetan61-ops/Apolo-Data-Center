@@ -1,0 +1,7 @@
+.git
+.github
+target
+**/target
+**/.env
+infrastructure/.env
+*.log
