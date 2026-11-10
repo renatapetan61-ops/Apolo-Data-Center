@@ -78,7 +78,7 @@ async fn upload_file(State(s):State<AppState>,Path((pid,filename)):Path<(Uuid,St
  .bind(pid).bind(owner).bind(name).bind(content_type).bind(body.len() as i64).bind(digest).bind(key).bind(kind)
  .fetch_one(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  if kind=="model"{
-  let config=serde_json::json!({"imported_file_id":row.id,"filename":row.filename,"content_type":row.content_type});
+  let config=serde_json::json!({"imported_file_id":row.id,"filename":row.filename.clone(),"content_type":row.content_type.clone()});
   sqlx::query("INSERT INTO project_models(project_id,user_id,name,architecture,config,status) VALUES($1,$2,$3,'imported',$4,'imported')")
    .bind(pid).bind(owner).bind(row.filename.clone()).bind(config).execute(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  }
