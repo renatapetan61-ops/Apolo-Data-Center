@@ -349,6 +349,8 @@ private fun ApoloApplication(
                     authenticated = false
                     sessionToken = ""
                     onSaveSession("")
+                    apiToken = ""
+                    onSaveToken("")
                     authMessage = "Você saiu da sua conta."
                 }
             )
@@ -482,7 +484,8 @@ private fun CapabilityScreen(modifier: Modifier, title: String, subtitle: String
 private fun SettingsScreen(
     modifier: Modifier, endpoint: String, onEndpointChange: (String) -> Unit,
     token: String, onTokenChange: (String) -> Unit,
-    onSave: () -> Unit, onConnect: () -> Unit, message: String, loading: Boolean
+    onSave: () -> Unit, onConnect: () -> Unit, message: String, loading: Boolean,
+    onLogout: () -> Unit
 ) {
     Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("CONFIGURAÇÕES", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
@@ -515,6 +518,7 @@ private fun SettingsScreen(
                 Text("O token é criptografado com AES-GCM usando chave protegida pelo Android Keystore. HTTP só é permitido em loopback/emulador.", color = TextMuted, fontSize = 12.sp)
             }
         }
+        OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Sair da conta") }
         Spacer(Modifier.weight(1f))
         Text("APOLO Data Center · Android nativo · v0.2.0", color = TextMuted, fontSize = 10.sp)
     }
