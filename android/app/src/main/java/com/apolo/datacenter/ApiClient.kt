@@ -70,7 +70,7 @@ object ApiClient {
         return request(endpoint, "/api/v1/projects/$projectId/models", "POST", token, body)
     }
     fun startTraining(endpoint: String, token: String, projectId: String, modelId: String): String {
-        val body = JSONObject().put("model_id", modelId.ifBlank { JSONObject.NULL }).put("config", JSONObject().put("framework", "pytorch")).toString()
+        val body = JSONObject().put("model_id", if (modelId.isBlank()) JSONObject.NULL else modelId).put("config", JSONObject().put("framework", "pytorch")).toString()
         return request(endpoint, "/api/v1/projects/$projectId/training", "POST", token, body)
     }
     fun uploadFile(endpoint: String, token: String, projectId: String, filename: String, contentType: String, kind: String, bytes: ByteArray): String {
