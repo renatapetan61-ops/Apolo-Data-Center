@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
                                 when (action) {
                                     "LOAD" -> { val w=ApiClient.workspace(endpoint,token,projectId); JSONObject().put("files",w.files).put("models",w.models).put("jobs",w.jobs).toString() }
                                     "CHAT" -> ApiClient.askKimi(endpoint,token,projectId,payload.substringBefore("\n"))
-                                    "MODEL" -> ApiClient.createModel(endpoint,token,projectId,payload.substringBefore("\n"),payload.substringAfter("\n").toLongOrNull() ?: 0L)
+                                    "MODEL" -> { val rest=payload.substringAfter("\n"); ApiClient.generateModel(endpoint,token,projectId,payload.substringBefore("\n"),rest.substringBefore("\n").toLongOrNull() ?: 0L,rest.substringAfter("\n","")) }
                                     "TRAIN" -> ApiClient.startTraining(endpoint,token,projectId,payload)
                                     else -> error("Ação desconhecida.")
                                 }
