@@ -1,4 +1,4 @@
-# AX Compute — primeira implementação
+# AX Compute — execução local inicial
 
 ## Arquitetura entregue
 
@@ -12,17 +12,13 @@ O crate `apolo-ax-compute` contém um executor local de processos nativos:
 - Diretório de trabalho deve estar dentro da raiz configurada.
 - Timeout encerra o processo; stdout/stderr são drenados em threads e limitados em bytes.
 - `ExecutionReceipt` registra nó, duração, código de saída, timeout e saída limitada.
+- A reserva é liberada após a tentativa de execução, inclusive quando a inicialização do processo falha após a validação da reserva.
 
 ## Limites de segurança e execução
 
-Este é um primeiro adaptador de processo local, não um sandbox forte. A verificação de diretório e allowlist reduz a superfície, mas não substitui isolamento por namespaces/cgroups/seccomp, usuário sem privilégios, filesystem dedicado, limites de CPU/RAM reais, rede isolada ou container/VM. O processo executa com as permissões do usuário do serviço.
+Este é um primeiro adaptador de processo local, não um sandbox forte. A verificação de diretório e allowlist reduz a superfície, mas não substitui isolamento por namespaces/cgroups/seccomp, usuário sem privilégios, filesystem dedicado, limites reais de CPU/RAM, rede isolada ou container/VM. O processo executa com as permissões do usuário do serviço.
 
-O executor ainda não:
-- lança container, VM, GPU kernel ou workload remoto;
-- reserva CPU/RAM fisicamente via kernel/cgroups;
-- faz cancelamento externo, retries, fila de execução ou persistência de logs;
-- implementa isolamento multi-tenant seguro;
-- distribui tarefas entre múltiplos nós.
+O executor ainda não lança container, VM, GPU kernel ou workload remoto; não reserva CPU/RAM fisicamente via kernel/cgroups; não faz cancelamento externo, retries, fila de execução ou persistência de logs; não implementa isolamento multi-tenant seguro; e não distribui tarefas entre múltiplos nós.
 
 A reserva do scheduler é uma autorização lógica; não equivale a enforcement físico de recursos do sistema operacional. Não exponha este executor a usuários não confiáveis em produção.
 
