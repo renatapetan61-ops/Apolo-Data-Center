@@ -2,7 +2,7 @@ use apolo_ax_scheduler::AxScheduler;
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{Html, IntoResponse},
+    response::Html,
     routing::get,
     Json, Router,
 };
