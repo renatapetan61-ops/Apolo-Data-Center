@@ -39,6 +39,8 @@ internal fun ProjectsScreen(
     var assistantOutput by remember { mutableStateOf("Assistente de engenharia de LLMs APOLO AX. Descreva o modelo que deseja projetar.") }
     var modelName by remember { mutableStateOf("") }
     var parameters by remember { mutableStateOf("1000000") }
+    var vtaParameters by remember { mutableStateOf("1000000") }
+    var vtaReport by remember { mutableStateOf("Consulte a VTA para estimar a capacidade real dos workers conectados.") }
     var fileKind by remember { mutableStateOf("dataset") }
     var busy by remember { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -150,6 +152,24 @@ internal fun ProjectsScreen(
                     onWorkspaceAction(p.id,"CHAT",q,""){r->busy=false;r.onSuccess{assistantOutput=it}.onFailure{assistantOutput=it.message?:"Falha no Kimi/NVIDIA NIM."}}
                 },enabled=assistantInput.isNotBlank()&&!busy,modifier=Modifier.fillMaxWidth()){Text("Consultar Kimi")}
             }
+
+            item {
+                Text("APOLO VTA · ACELERADOR VIRTUAL",color=Color(0xFF78A9FF),fontWeight=FontWeight.Bold,fontSize=11.sp)
+                Text("Planeja o uso combinado de memória e aceleradores dos workers reais. Não cria hardware nem inventa FLOPS.",color=Color(0xFF9BAEC8),fontSize=11.sp)
+                OutlinedTextField(vtaParameters,{vtaParameters=it},modifier=Modifier.fillMaxWidth(),label={Text("Parâmetros desejados")})
+                Button(onClick={
+                    busy=true
+                    onWorkspaceAction(p.id,"VTA",vtaParameters,""){r->
+                        busy=false
+                        r.onSuccess{raw->
+                            val v=JSONObject(raw)
+                            vtaReport="Viável pela estimativa: "+v.optString("feasible_by_memory_estimate")+" · Limite estimado: "+v.optString("estimated_parameter_limit")+" parâmetros · Workers online: "+v.optInt("active_workers")+" · GPUs: "+v.optInt("gpu_workers")+"\n"+v.optString("reason")
+                        }.onFailure{vtaReport=it.message?:"Falha ao consultar APOLO VTA."}
+                    }
+                },enabled=!busy&&vtaParameters.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("Analisar capacidade da VTA")}
+                Text(vtaReport,color=Color(0xFFEAF1FC),fontSize=11.sp)
+            }
+
             item {
                 Text("TREINAMENTO E CHECKPOINTS",color=Color(0xFF78A9FF),fontWeight=FontWeight.Bold,fontSize=11.sp)
                 Text("A solicitação é bloqueada quando não há worker AX online com heartbeat recente. Nenhum treino é simulado.",color=Color(0xFF9BAEC8),fontSize=11.sp)
