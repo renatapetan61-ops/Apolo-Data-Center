@@ -1,73 +1,115 @@
-# Registro de implementação
+# Registro de implementacao
 
-Data de referência: 2026-11-10
+Data de referencia: 2026-11-10
 
 ## Diretriz de desenvolvimento
 
-O APOLO DATA CENTER terá serviços e control planes próprios, implementados no repositório. Bibliotecas, protocolos e runtimes externos poderão ser usados como componentes de baixo nível, sem substituir os serviços APOLO. A camada AX poderá virtualizar e agregar recursos de múltiplos dispositivos; capacidade física só será reconhecida após descoberta, verificação e provisionamento de hardware real.
+O APOLO DATA CENTER terá control plane, serviços, protocolos de agente, mecanismos de storage e runtime de computação próprios. Bibliotecas, compiladores, protocolos e recursos de infraestrutura podem ser usados como fundação técnica, sem confundir isso com serviços APOLO já implementados. O software pode criar capacidade lógica, volumes virtuais, alocações e pools de recursos; capacidade física de CPU, RAM, discos e rede depende de dispositivos reais ou de infraestrutura provisionada.
 
-O GitHub Actions instala e verifica Rust/Cargo, Python, Go e Java nos runners. Isso não instala ferramentas automaticamente no Android/Termux do usuário.
-
-## Fase 1 — Fundação
+## Fase 1 — Fundacao e arquitetura
 Status: estrutura versionada.
+
 Entregue: workspace Rust, crates modulares, arquitetura control/data plane, ADR, Compose local e GitHub Actions.
 
 ## Fase 2 — AX Core
-Status: implementação inicial validada em CI.
-- ByteCount u128 para representar capacidades lógicas muito grandes.
-- Separação entre quota lógica, total físico, uso e reservas.
-- Capacidade física bloqueada sem inventário verificado.
-- ComputeResource e NodeInventory com CPU, RAM, storage, rede e aceleradores.
-- Elegibilidade de nós e pré-validação de compatibilidade.
-- Perfis AX-1, AX-8, AX-128, AX-10000 e customizados; perfis não representam hardware instalado.
+Status: implementacao inicial validada em CI.
+
+Implementado:
+- ByteCount u128 para capacidades de escala exabyte.
+- Separacao entre quota logica, total fisico, uso e reservas.
+- Capacidade fisica bloqueada sem inventario verificado.
+- ComputeResource com tipo, memoria, estado e validacao.
+- NodeInventory com CPU, RAM, storage, rede, timestamp e aceleradores.
+- Elegibilidade de nos e pre-validacao de compatibilidade de recursos.
+- Perfis AX-1, AX-8, AX-128, AX-10000 e perfis customizados.
+- Solicitacao de recursos explicita; nome comercial nao representa hardware.
 
 ## Fase 3 — AX Storage
-Status: primeira implementação local funcional; distribuição e persistência transacional pendentes.
-- ObjectStore e adapter LocalFsObjectStore.
-- Fragmentação em blocos, manifesto JSON, SHA-256 por bloco/objeto, reconstrução e verificação.
-- Quota local em memória, escrita de arquivos por rename e exclusão.
-Pendências: backend S3/MinIO, PostgreSQL, quota multi-instância, replicação, erasure coding, auto-repair, KMS, versionamento, retenção e streaming multipart.
+Status: primeira implementacao local funcional; distribuicao e persistencia transacional pendentes.
+
+Implementado:
+- Contrato ObjectStore e adapter LocalFsObjectStore.
+- Fragmentacao de objetos em blocos.
+- Manifesto JSON com metadados, tamanhos e SHA-256 por bloco e objeto.
+- Reconstrucao e verificacao de integridade na leitura.
+- Quota local em memoria por instancia de StorageEngine.
+- Escrita atomica de arquivos individuais via rename.
+- Exclusao de objetos e liberacao do contador local.
+
+Pendencias:
+- Adapter S3/MinIO real, metadados PostgreSQL e contabilidade atomica multi-instancia.
+- Replicacao, erasure coding, reparo automatico, KMS, versionamento e retencao.
+- Upload multipart/resumivel e streaming sem carregar todo objeto na RAM.
 
 ## Fase 4 — AX Data Ingestion
-Status: pipeline local inicial implementado e validado.
-- Detecção de JSON, JSONL, CSV, TXT/Markdown, PDF, DOCX, imagens, áudio e vídeo por extensão.
-- Validação básica de JSON/JSONL, CSV, UTF-8 e assinaturas de arquivos conhecidos.
-- Limite de bytes, fila limitada/backpressure, dedupe SHA-256 por projeto, rate limit deslizante por projeto e ordenação temporal.
-Pendências: fila durável/distribuída, dedupe persistente, análise profunda de arquivos, antivírus/sandbox, OCR, codecs, validação MIME e integração direta ao Storage.
+Status: pipeline local inicial implementado e validado em CI.
+
+Implementado:
+- Deteccao de JSON, JSONL/NDJSON, CSV, TXT/Markdown, PDF, DOCX, imagens, audio e video pela extensao.
+- Validacao basica de JSON/JSONL, CSV, UTF-8 e assinaturas conhecidas de PDF, DOCX, PNG, JPEG e WebP.
+- Limite configuravel de bytes por entrada.
+- Fila limitada com retorno explicito QueueFull para backpressure.
+- Deduplicacao SHA-256 por projeto.
+- Limite deslizante de entradas por hora por projeto.
+- Ordem temporal por projeto para rejeitar timestamp retrocedente.
+- Dequeue e metricas de profundidade da fila.
+
+Pendencias:
+- Fila duravel/distribuida, persistencia de deduplicacao e recuperacao apos restart.
+- Validacao profunda de PDF/DOCX, antivirus/sandbox, OCR, transcodificacao e parsers de audio/video.
+- Validacao estrita do MIME type e limites por bytes agregados/tenant.
+- Persistencia de metadados e entrega direta ao AX Storage.
 
 ## Fase 5 — AX Scheduler
-Status: primeira versão implementada e validada em CI.
-- Registro/atualização de inventários e colocação best-fit determinística.
-- Reserva atômica em processo de CPU, memória, storage, rede e aceleradores.
-- Prevenção de dupla alocação concorrente dentro de uma instância.
-- Rejeição de job duplicado ativo, liberação e consulta de reservas.
-- Atualizações de inventário são recusadas quando conflitam com recursos reservados.
-Limites: estado em memória, sem persistência após restart, sem coordenação multi-instância, leases, heartbeat, fencing, quotas por tenant ou integração Kubernetes.
+Status: primeira implementacao em Rust; validacao CI pendente nesta revisao.
+
+Implementado:
+- Registro e atualizacao de inventarios.
+- Colocacao best-fit deterministica.
+- Reserva atomica em processo de CPU, memoria, armazenamento, rede e aceleradores.
+- Prevencao de dupla alocacao concorrente dentro de uma instancia.
+- Verificacao agregada de banda de rede.
+- Preservacao de aceleradores reservados durante atualizacao de inventario.
+- Rejeicao de jobs duplicados ativos, liberacao e consulta de reservas.
+
+Pendencias:
+- Persistencia PostgreSQL, leases, heartbeat, fencing tokens e recuperacao apos restart.
+- Coordenacao multi-instancia, prioridades, fairness, quotas por tenant e preempcao.
+- Autenticacao e atestacao dos agentes de nos.
 
 ## Fase 6 — AX Compute
-Status: executor local inicial implementado e validado em CI.
-- ComputeJob com programa, argumentos, ambiente, diretório, timeout e ID de reserva.
-- ExecutionPolicy com allowlist de executáveis canônicos, raiz de sandbox, timeout máximo e limite de stdout/stderr.
-- ProcessExecutor exige reserva ativa do Scheduler pertencente ao mesmo job e libera a reserva após a tentativa de execução.
-- Execução sem shell, ambiente limpo, bloqueio de PATH/LD_* e diretório confinado à raiz configurada.
-- Timeout com encerramento de processo, drenagem de stdout/stderr e saída limitada.
-- ExecutionReceipt com código de saída, duração, timeout e saída.
-Limites: adaptador de processo local; não é container ou VM, não oferece isolamento forte, não aplica limites físicos via cgroups, não executa em GPU ou nós remotos e não possui worker daemon autenticado. Não expor a workloads não confiáveis em produção.
+Status: executor local inicial implementado em Rust; validacao CI pendente nesta revisao.
 
-## Toolchain e CI
-GitHub Actions prepara e verifica:
-- Rust estável, Cargo, rustfmt e Clippy.
-- Python 3.12.
-- Go 1.24.
-- Java 21.
+Implementado:
+- ComputeJob e politica de execucao por allowlist de executaveis.
+- Validacao da reserva do Scheduler e correspondencia do job.
+- Execucao nativa sem shell, ambiente limpo e diretorio de trabalho dentro da raiz permitida.
+- Timeout e captura limitada de stdout/stderr.
+- Recibo de execucao com codigo de saida, duracao e timeout.
+- Liberacao da reserva apos a tentativa de execucao.
 
-Execução de validação que incluiu AX Core, Storage, Ingestion, Scheduler e Compute:
-https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42826456655
+Pendencias:
+- Isolamento forte com cgroups v2, namespaces, seccomp e usuario sem privilegios.
+- Limites reais de CPU, RAM, I/O e rede aplicados pelo sistema operacional.
+- Worker daemon, execucao remota, container/VM, GPU e persistencia de jobs/logs.
+- Cancelamento externo, retries, fila de execucao e telemetria.
 
-Resultado: formatter, Clippy com -D warnings e 35 testes unitários aprovados (15 Core, 4 Storage, 6 Ingestion, 6 Scheduler e 4 Compute). O CI mais recente também valida os ajustes de contabilização de rede/aceleradores e liberação da reserva pelo executor.
+## Limites e garantias
+- Storage atual e local, nao distribuido; quotas sao locais a uma instancia.
+- Ingestion atual mantem payloads e dedupe em memoria; restart perde fila e historico.
+- Scheduler atual mantem nos e reservas em memoria; restart perde estado e nao coordena processos distintos.
+- AX Compute atual executa processos no host e nao e isolamento multi-tenant seguro.
+- Audio/video passam apenas por verificacao basica de payload nao vazio; nao ha decodificacao de codec.
+- Capacidade logica nao e prova de existencia de hardware, armazenamento fisico ou throughput.
+- Nenhum hardware fisico, GPU ou cluster de producao foi provisionado por estes modulos.
 
-## Próximas etapas
-1. AX Compute worker daemon, isolamento Linux real (cgroups v2, namespaces, seccomp) e agentes de nó autenticados.
-2. Persistência transacional e leases para Scheduler.
-3. AX Storage distribuído com metadados e cotas persistentes.
-4. AX Cluster e comunicação autenticada entre nós.
+## Validacao automatizada anterior
+GitHub Actions executado com sucesso para AX Core, Storage e Ingestion:
+- Rust formatter executado.
+- Clippy aprovado com `-D warnings`.
+- 25 testes unitarios aprovados: 15 AX Core, 4 AX Storage e 6 AX Ingestion.
+
+Execucao: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42822969708
+
+## Proxima etapa
+Fase 7 — AX Training Engine: preparar ciclo de treinamento, dataset manifests, experimentos, checkpoints e adaptadores de execução. Antes, evoluir AX Compute para agente de nó com isolamento de sistema operacional.
