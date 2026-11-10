@@ -47,7 +47,7 @@ impl DataFormat {
                         .all(|line| serde_json::from_slice::<serde_json::Value>(line).is_ok())
             }
             Self::Csv => std::str::from_utf8(bytes).is_ok()
-                && bytes.iter().any(|byte| *byte == b',')
+                && bytes.contains(&b',')
                 && bytes.iter().any(|byte| *byte == b'\n'),
             Self::Txt => std::str::from_utf8(bytes).is_ok(),
             Self::Pdf => bytes.starts_with(b"%PDF-"),
