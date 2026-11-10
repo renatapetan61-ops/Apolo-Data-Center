@@ -3,6 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val releaseStoreFile = System.getenv("APOLO_RELEASE_STORE_FILE")
+val releaseStorePassword = System.getenv("APOLO_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = System.getenv("APOLO_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("APOLO_RELEASE_KEY_PASSWORD")
+
 android {
     namespace = "com.apolo.datacenter"
     compileSdk = 36
@@ -13,10 +19,23 @@ android {
         versionCode = 2
         versionName = "0.2.0"
     }
+    signingConfigs {
+        if (!releaseStoreFile.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         debug { applicationIdSuffix = ".debug"; versionNameSuffix = "-debug" }
         release {
             isMinifyEnabled = true
+            if (!releaseStoreFile.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -27,6 +46,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 }
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2025.10.00")
     implementation(composeBom)
