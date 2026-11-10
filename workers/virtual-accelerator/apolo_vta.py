@@ -18,7 +18,7 @@ import requests
 BYTES_PER_PARAMETER_ADAMW_BF16 = 16
 SAFETY_FACTOR = 0.65
 HUGE_NAMES = {
-    "googolplex", "100 googolplex", "centillion", "um centilhao",
+    "googolplex", "100 googolplex", "centillion", "novemdecillion", "100 novemdecillion", "novemdecillion parameters", "100 novemdecillion parameters", "um centilhao",
     "um centilhão", "100 centillion", "100 centilhoes", "100 centilhões",
 }
 
@@ -59,7 +59,7 @@ def estimate_capacity(workers: list[dict[str, Any]]) -> dict[str, Any]:
 
 def assess(requested: str, capacity: dict[str, Any]) -> dict[str, Any]:
     normalized = requested.strip().lower()
-    if normalized in HUGE_NAMES or "googolplex" in normalized or "centilh" in normalized:
+    if normalized in HUGE_NAMES or "googolplex" in normalized or "centilh" in normalized or "centillion" in normalized or "novemdecillion" in normalized or "novemdecilhao" in normalized or "novemdecilhão" in normalized:
         return {
             "requested_parameters": requested,
             "feasible": False,
@@ -73,7 +73,7 @@ def assess(requested: str, capacity: dict[str, Any]) -> dict[str, Any]:
         return {
             "requested_parameters": requested,
             "feasible": None,
-            "reason": "Informe a quantidade como inteiro decimal ou use googolplex/centilhão para análise de inviabilidade.",
+            "reason": "Informe a quantidade como inteiro decimal ou use googolplex, centilhão ou novemdecillion para análise de inviabilidade.",
         }
     limit = capacity["estimated_gpu_parameters_bf16_adamw"]
     if capacity["gpu_workers"] == 0:
@@ -92,7 +92,7 @@ def assess(requested: str, capacity: dict[str, Any]) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="APOLO VTA virtual accelerator planner")
-    parser.add_argument("--parameters", required=True, help="Parâmetros do modelo (inteiro), googolplex ou centilhão")
+    parser.add_argument("--parameters", required=True, help="Parâmetros do modelo (inteiro), googolplex, centilhão ou novemdecillion")
     parser.add_argument("--api", default=os.getenv("APOLO_AX_API", "").rstrip("/"))
     parser.add_argument("--token", default=os.getenv("APOLO_AX_TOKEN", ""))
     args = parser.parse_args()
