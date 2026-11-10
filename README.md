@@ -10,7 +10,7 @@ Stack planejada: Rust (AX), Python (workers PyTorch/JAX), Kotlin (Android), Post
 
 Consulte docs/architecture/overview.md e docs/adr/0001-architecture-boundaries.md.
 
-## Aplicativo web inicial (MVP de control plane)
+## API e painel web complementar (MVP de control plane)
 
 O primeiro aplicativo utilizável está em `apps/ax-api`:
 - API HTTP Rust com `/healthz`, `/api/v1/overview` e `/api/v1/nodes`.
@@ -28,7 +28,7 @@ O primeiro aplicativo utilizável está em `apps/ax-api`:
 Não publique esta versão diretamente na internet. Antes disso são necessários autenticação, autorização, TLS, persistência, rate limiting, auditoria, hardening e revisão de segurança.
 
 
-## Aplicativo Android nativo (Kotlin)
+## Aplicativo Android nativo (Kotlin + Jetpack Compose)
 
 O aplicativo principal para o usuário é Android nativo e está em `android/`:
 - Kotlin + Android Gradle Plugin, sem depender do painel web para funcionar como aplicativo.
