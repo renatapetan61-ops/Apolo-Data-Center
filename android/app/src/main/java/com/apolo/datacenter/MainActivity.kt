@@ -56,14 +56,29 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = AndroidColor.rgb(11, 18, 32)
         val initialEndpoint = preferences.getString("api_endpoint", "https://api.apolo-datacenter.example")
             ?: "https://api.apolo-datacenter.example"
+        val initialToken = SecureTokenStore.read(this)
         setContent {
             ApoloTheme {
                 ApoloApplication(
                     initialEndpoint = initialEndpoint,
+                    initialToken = initialToken,
                     onSaveEndpoint = { value -> preferences.edit().putString("api_endpoint", value).apply() },
+                    onSaveToken = { value -> SecureTokenStore.write(this, value) },
                     onConnect = { endpoint, callback ->
                         executor.execute {
                             val result = runCatching { fetchSnapshot(endpoint) }
+                            runOnUiThread { callback(result) }
+                        }
+                    },
+                    onProjectAction = { endpoint, token, action, name, description, projectId, callback ->
+                        executor.execute {
+                            val result = runCatching {
+                                when (action) {
+                                    ProjectAction.LOAD -> ApiClient.fetchProjects(endpoint, token)
+                                    ProjectAction.CREATE -> ApiClient.createProject(endpoint, token, name, description)
+                                    ProjectAction.DELETE -> ApiClient.deleteProject(endpoint, token, projectId)
+                                }
+                            }
                             runOnUiThread { callback(result) }
                         }
                     }
@@ -135,11 +150,15 @@ private fun ApoloTheme(content: @Composable () -> Unit) {
 @Composable
 private fun ApoloApplication(
     initialEndpoint: String,
+    initialToken: String,
     onSaveEndpoint: (String) -> Unit,
-    onConnect: (String, (Result<ApiSnapshot>) -> Unit) -> Unit
+    onSaveToken: (String) -> Unit,
+    onConnect: (String, (Result<ApiSnapshot>) -> Unit) -> Unit,
+    onProjectAction: (String, String, ProjectAction, String, String, String, (Result<List<ProjectInfo>>) -> Unit) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(AppTab.HOME) }
     var endpoint by remember { mutableStateOf(initialEndpoint) }
+    var apiToken by remember { mutableStateOf(initialToken) }
     var snapshot by remember { mutableStateOf<ApiSnapshot?>(null) }
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("API ainda não conectada") }
@@ -219,15 +238,27 @@ private fun ApoloApplication(
                 listOf("AX Scheduler", "AX Compute", "AX Accelerator ISA", "Treinamento de modelos"),
                 "O scheduler e o runtime AX existem no núcleo Rust. Execução remota multiusuário e aceleradores físicos ainda não estão habilitados."
             )
-            AppTab.PROJECTS -> CapabilityScreen(
-                Modifier.padding(padding), "Projetos", "Organize conjuntos de dados e workloads",
-                listOf("Projetos de IA", "Datasets", "Jobs de treinamento", "Histórico de execução"),
-                "A gestão persistente de projetos, usuários e jobs depende de autenticação e banco transacional."
+            AppTab.PROJECTS -> ProjectsScreen(
+                endpoint = endpoint,
+                token = apiToken,
+                onAction = { action, name, description, projectId, callback ->
+                    onProjectAction(endpoint, apiToken, action, name, description, projectId, callback)
+                }
             )
             AppTab.SETTINGS -> SettingsScreen(
-                Modifier.padding(padding), endpoint, { endpoint = it },
-                { onSaveEndpoint(endpoint); message = "Endereço salvo neste dispositivo." },
-                ::connect, message, loading
+                modifier = Modifier.padding(padding),
+                endpoint = endpoint,
+                onEndpointChange = { endpoint = it },
+                token = apiToken,
+                onTokenChange = { apiToken = it },
+                onSave = {
+                    onSaveEndpoint(endpoint)
+                    onSaveToken(apiToken)
+                    message = "Endereço e token protegidos salvos neste dispositivo."
+                },
+                onConnect = ::connect,
+                message = message,
+                loading = loading
             )
         }
     }
@@ -358,6 +389,7 @@ private fun CapabilityScreen(modifier: Modifier, title: String, subtitle: String
 @Composable
 private fun SettingsScreen(
     modifier: Modifier, endpoint: String, onEndpointChange: (String) -> Unit,
+    token: String, onTokenChange: (String) -> Unit,
     onSave: () -> Unit, onConnect: () -> Unit, message: String, loading: Boolean
 ) {
     Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -368,7 +400,13 @@ private fun SettingsScreen(
             value = endpoint, onValueChange = onEndpointChange, modifier = Modifier.fillMaxWidth(),
             label = { Text("URL da API") }, placeholder = { Text("https://seu-servidor") }, singleLine = true
         )
-        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Salvar endereço") }
+        OutlinedTextField(
+            value = token, onValueChange = onTokenChange, modifier = Modifier.fillMaxWidth(),
+            label = { Text("Token da API (mínimo 32 caracteres)") },
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            singleLine = true
+        )
+        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Salvar conexão e token") }
         OutlinedButton(onClick = onConnect, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
             if (loading) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
             else Text("Testar conexão")
@@ -378,7 +416,7 @@ private fun SettingsScreen(
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Text("SEGURANÇA", color = Accent, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 Text("HTTPS obrigatório em servidores remotos", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("HTTP é permitido somente para loopback e o endereço especial do emulador Android. Não insira senhas ou tokens nesta tela.", color = TextMuted, fontSize = 12.sp)
+                Text("O token é criptografado com AES-GCM usando chave protegida pelo Android Keystore. HTTP só é permitido em loopback/emulador.", color = TextMuted, fontSize = 12.sp)
             }
         }
         Spacer(Modifier.weight(1f))
