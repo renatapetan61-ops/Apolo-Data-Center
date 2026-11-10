@@ -244,6 +244,27 @@ async fn update_metrics(State(s):State<AppState>,Path(id):Path<Uuid>,headers:Hea
  .bind(id).bind(input.metrics).bind(input.checkpoint_key).bind(owner).execute(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  if result.rows_affected()==0{return Err(StatusCode::NOT_FOUND)} Ok(StatusCode::NO_CONTENT)
 }
+
+async fn claim_worker_job(State(s):State<AppState>,Path(worker_id):Path<Uuid>,headers:HeaderMap)->Result<Json<serde_json::Value>,StatusCode>{
+ let owner=authorize(&s,&headers).await?;
+ let db=database(&s)?;
+ let valid=sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM ax_workers WHERE id=$1 AND status='online' AND last_seen_at>NOW()-INTERVAL '90 seconds' AND ($2::uuid IS NULL OR user_id=$2))")
+ .bind(worker_id).bind(owner).fetch_one(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ if !valid{return Err(StatusCode::FORBIDDEN)}
+ let row=sqlx::query_as::<_,JobRow>("WITH candidate AS (SELECT id FROM training_jobs WHERE status='queued' AND ($1::uuid IS NULL OR user_id=$1) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE training_jobs j SET status='running',worker_id=$2,started_at=NOW(),updated_at=NOW() FROM candidate c WHERE j.id=c.id RETURNING j.id,j.project_id,j.model_id,j.status,j.config,j.metrics,j.checkpoint_key,j.worker_id,j.error,j.created_at,j.started_at,j.finished_at")
+ .bind(owner).bind(worker_id).fetch_optional(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ match row {Some(job)=>Ok(Json(serde_json::to_value(job).map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?)),None=>Ok(Json(serde_json::Value::Null))}
+}
+#[derive(Deserialize)]
+struct CompleteInput { success: bool, error: Option<String> }
+async fn complete_job(State(s):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap,Json(input):Json<CompleteInput>)->Result<StatusCode,StatusCode>{
+ let owner=authorize(&s,&headers).await?;
+ let status=if input.success{"completed"}else{"failed"};
+ let result=sqlx::query("UPDATE training_jobs SET status=$2,error=$3,finished_at=NOW(),updated_at=NOW() WHERE id=$1 AND status='running' AND ($4::uuid IS NULL OR user_id=$4)")
+ .bind(id).bind(status).bind(input.error).bind(owner).execute(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ if result.rows_affected()==0{return Err(StatusCode::NOT_FOUND)} Ok(StatusCode::NO_CONTENT)
+}
+
 pub(crate) fn router()->Router<AppState>{
  Router::new()
  .route("/api/v1/projects/{pid}/files",get(list_files))
@@ -255,6 +276,8 @@ pub(crate) fn router()->Router<AppState>{
  .route("/api/v1/projects/{pid}/training",get(list_jobs).post(create_training))
  .route("/api/v1/workers",post(register_worker))
  .route("/api/v1/workers/{id}/heartbeat",post(heartbeat))
+ .route("/api/v1/workers/{id}/claim",post(claim_worker_job))
  .route("/api/v1/training/{id}/metrics",post(update_metrics))
+ .route("/api/v1/training/{id}/complete",post(complete_job))
  .layer(DefaultBodyLimit::max(100*1024*1024))
 }
