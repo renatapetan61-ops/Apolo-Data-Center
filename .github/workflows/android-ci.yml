@@ -5,6 +5,8 @@ on:
     paths:
       - "android/**"
       - ".github/workflows/android-ci.yml"
+      - "apps/ax-api/**"
+      - "Cargo.toml"
   pull_request:
     branches: [main]
     paths:
@@ -81,10 +83,10 @@ jobs:
         if: env.RELEASE_SIGNING_READY == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: apolo-data-center-v0.2.0-build-${{ github.run_number }}
-          name: APOLO Data Center Android v0.2.0 (build ${{ github.run_number }})
+          tag_name: apolo-data-center-v0.3.0-build-${{ github.run_number }}
+          name: APOLO Data Center Android v0.3.0 (build ${{ github.run_number }})
           body: |
-            APK Release assinado do APOLO Data Center.
+            APK Release assinado do APOLO Data Center v0.3.0 com login, cadastro e emissão de tokens individuais da API.
             
             Instalação: baixe o arquivo APK em Assets e abra-o no Android.
             Arquitetura: APK universal; não restringe o pacote a uma ABI específica.
