@@ -203,7 +203,7 @@ async fn kimi_chat(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderM
  messages.push(ChatMessage{role:"user".into(),content:input.message});
  let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build().map_err(|_|StatusCode::BAD_GATEWAY)?;
  let response=client.post("https://integrate.api.nvidia.com/v1/chat/completions").bearer_auth(key)
- .json(&serde_json::json!({"model":model,"messages":messages,"temperature":0.2,"max_tokens":8192}))
+ .json(&serde_json::json!({"model":model,"messages":messages,"temperature":0.2,"reasoning_effort":"high","max_tokens":8192}))
  .send().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
  let status=response.status(); let value:serde_json::Value=response.json().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
  if !status.is_success(){eprintln!("NVIDIA NIM returned HTTP {status}: {}",value);return Err(if status.as_u16()==429{StatusCode::TOO_MANY_REQUESTS}else{StatusCode::BAD_GATEWAY})}
@@ -220,7 +220,7 @@ async fn generate_model(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:He
  let request=format!("Crie os arquivos iniciais do LLM solicitado. Nome: {}. Parâmetros pretendidos: {:?}. Requisitos do usuário: {}. Retorne SOMENTE JSON válido com chaves model_config (objeto), model_py (código PyTorch), train_py (código Python executável), readme (texto). Gere decoder Transformer pequeno e funcional como scaffold se a escala não for viável. Não alegue modelo pré-treinado. O train_py deve aceitar os argumentos --data, --output, --epochs, --batch-size, --seq-len, --lr e --vocab-size; ler JSONL tokenizado com input_ids; usar AdamW, clipping, emitir linhas JSON com loss/step e salvar checkpoints em --output. Inclua limites e estimativa de recursos em readme.",input.name,input.parameters,input.description);
  let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(180)).build().map_err(|_|StatusCode::BAD_GATEWAY)?;
  let response=client.post("https://integrate.api.nvidia.com/v1/chat/completions").bearer_auth(key)
- .json(&serde_json::json!({"model":model,"messages":[{"role":"system","content":SYSTEM_PROMPT},{"role":"user","content":request}],"temperature":0.1,"max_tokens":16000}))
+ .json(&serde_json::json!({"model":model,"messages":[{"role":"system","content":SYSTEM_PROMPT},{"role":"user","content":request}],"temperature":0.1,"reasoning_effort":"max","max_tokens":16000}))
  .send().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
  let status=response.status();let value:serde_json::Value=response.json().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
  if !status.is_success(){eprintln!("NVIDIA NIM returned HTTP {status}: {}",value);return Err(if status.as_u16()==429{StatusCode::TOO_MANY_REQUESTS}else{StatusCode::BAD_GATEWAY})}
