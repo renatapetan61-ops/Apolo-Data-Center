@@ -203,3 +203,24 @@ Validação CI do AX Reference Runtime e Bytecode:
 - AX Bytecode encoder/decoder: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42828603754 (sucesso).
 - Regras de operandos ISA: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42828633347 (sucesso).
 - Formatter, Clippy com `-D warnings` e testes do workspace aprovados nessas execuções.
+
+
+## Aplicativo web APOLO AX — MVP inicial
+
+Status: implementação inicial adicionada; CI Rust e build de container pendentes.
+
+Implementado:
+- API HTTP Rust em `apps/ax-api` com health check, overview e consulta de inventário.
+- Dashboard web PT-BR servido pela API.
+- Testes de health check e de inventário vazio, para evitar inventar capacidade física.
+- Dockerfile multi-stage com usuário não-root, filesystem read-only, health check e capacidades Linux removidas.
+- Docker Compose com API e serviços auxiliares; portas dos serviços auxiliares limitadas ao loopback do host.
+- `.dockerignore` exclui arquivos `.env` e diretórios de build.
+- CI de construção de imagem e workflow de publicação no GHCR acionado por tag `v*`.
+
+Limites:
+- API ainda não usa PostgreSQL, Redis ou MinIO; scheduler e inventário são voláteis.
+- Sem autenticação, RBAC, multi-tenancy, billing, registro remoto de agentes, TLS de produção, execução de workloads pela API ou deployment em provedor público.
+- O workflow GHCR publica uma imagem versionada, mas não configura servidor, DNS nem produção automaticamente.
+
+Documentação: `docs/deployment/application-and-deployment.md`.
