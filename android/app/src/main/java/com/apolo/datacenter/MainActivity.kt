@@ -519,6 +519,6 @@ private fun SettingsScreen(
         }
         OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Sair da conta") }
         Spacer(Modifier.weight(1f))
-        Text("APOLO Data Center · Android nativo · v0.2.0", color = TextMuted, fontSize = 10.sp)
+        Text("APOLO Data Center · Android nativo · v0.3.0", color = TextMuted, fontSize = 10.sp)
     }
 }
