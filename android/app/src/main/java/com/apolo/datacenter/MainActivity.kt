@@ -1,121 +1,101 @@
 package com.apolo.datacenter
 
-import android.app.Activity
+import android.content.Context
 import android.os.Bundle
-import android.graphics.Typeface
-import android.view.Gravity
-import android.view.View
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
+import android.graphics.Color as AndroidColor
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
-class MainActivity : Activity() {
+private val Navy = Color(0xFF0B1220)
+private val Panel = Color(0xFF141F31)
+private val PanelAlt = Color(0xFF1B2A40)
+private val Accent = Color(0xFF78A9FF)
+private val TextPrimary = Color(0xFFEAF1FC)
+private val TextMuted = Color(0xFF9BAEC8)
+private val Good = Color(0xFF62D6A5)
+private val Warning = Color(0xFFF3C46B)
+
+private enum class AppTab(val label: String, val symbol: String) {
+    HOME("Início", "⌂"), STORAGE("Dados", "▤"), COMPUTE("Compute", "◈"),
+    PROJECTS("Projetos", "▦"), SETTINGS("Ajustes", "⚙")
+}
+
+private data class NodeInfo(val id: String, val state: String, val detail: String)
+private data class ApiSnapshot(
+    val status: String,
+    val service: String,
+    val controlPlane: String,
+    val persistence: String,
+    val nodes: List<NodeInfo>
+)
+
+class MainActivity : ComponentActivity() {
     private val executor = Executors.newSingleThreadExecutor()
-    private lateinit var endpoint: EditText
-    private lateinit var status: TextView
-    private lateinit var nodes: TextView
-    private lateinit var details: TextView
+    private val preferences by lazy { getSharedPreferences("apolo_settings", Context.MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = android.graphics.Color.rgb(11, 18, 32)
-        window.navigationBarColor = android.graphics.Color.rgb(11, 18, 32)
-
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24, 28, 24, 24)
-            setBackgroundColor(android.graphics.Color.rgb(11, 18, 32))
-        }
-        fun label(value: String, size: Float, color: Int, bold: Boolean = false) =
-            TextView(this).apply {
-                text = value
-                textSize = size
-                setTextColor(color)
-                if (bold) typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, 8, 0, 8)
-            }
-        val blue = android.graphics.Color.rgb(138, 180, 255)
-        val white = android.graphics.Color.rgb(232, 238, 248)
-        val muted = android.graphics.Color.rgb(159, 176, 200)
-
-        root.addView(label("APOLO / INFRASTRUCTURE", 12f, blue, true))
-        root.addView(label("Data Center", 30f, white, true))
-        root.addView(label("Aplicativo Android nativo · Control plane AX", 14f, muted))
-        status = label("Aguardando conexão", 14f, blue, true)
-        root.addView(status)
-
-        root.addView(label("Endereço da API", 13f, muted, true))
-        endpoint = EditText(this).apply {
-            setSingleLine(true)
-            setText("https://api.apolo-datacenter.example")
-            setTextColor(white)
-            setHintTextColor(muted)
-            hint = "https://seu-servidor"
-            setPadding(14, 10, 14, 10)
-        }
-        root.addView(endpoint, LinearLayout.LayoutParams(-1, -2))
-
-        root.addView(Button(this).apply {
-            text = "Conectar e atualizar"
-            setOnClickListener { refresh() }
-        })
-        nodes = label("Nós registrados: —", 22f, white, true)
-        root.addView(nodes)
-        root.addView(label("Inventário real retornado pelo servidor", 13f, muted))
-        details = label("Nenhum dado carregado.", 13f, white)
-        val scroll = ScrollView(this)
-        scroll.addView(details)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(label(
-            "A capacidade física só aparece após inventário verificado. Esta versão não cria nem simula hardware.",
-            12f, muted
-        ))
-        setContentView(root)
-    }
-
-    private fun refresh() {
-        val base = endpoint.text.toString().trim().trimEnd('/')
-        if (!base.startsWith("https://") &&
-            !base.startsWith("http://10.0.2.2") &&
-            !base.startsWith("http://127.0.0.1") &&
-            !base.startsWith("http://localhost")) {
-            status.text = "Use HTTPS para conexões remotas."
-            return
-        }
-        status.text = "Conectando…"
-        executor.execute {
-            try {
-                val health = get("$base/healthz")
-                val overview = JSONObject(get("$base/api/v1/overview"))
-                val inventory = JSONArray(get("$base/api/v1/nodes"))
-                runOnUiThread {
-                    status.text = "API online · ${health.optString("status")}"
-                    nodes.text = "Nós registrados: ${overview.optInt("node_count")}"
-                    details.text = buildString {
-                        append("Serviço: ").append(overview.optString("service")).append("\n")
-                        append("Control plane: ").append(overview.optString("control_plane")).append("\n")
-                        append("Persistência: ").append(overview.optString("persistence")).append("\n\n")
-                        if (inventory.length() == 0) append("Nenhum nó registrado.")
-                        else for (i in 0 until inventory.length()) {
-                            append(inventory.getJSONObject(i).toString(2)).append("\n\n")
+        window.statusBarColor = AndroidColor.rgb(11, 18, 32)
+        window.navigationBarColor = AndroidColor.rgb(11, 18, 32)
+        val initialEndpoint = preferences.getString("api_endpoint", "https://api.apolo-datacenter.example")
+            ?: "https://api.apolo-datacenter.example"
+        setContent {
+            ApoloTheme {
+                ApoloApplication(
+                    initialEndpoint = initialEndpoint,
+                    onSaveEndpoint = { value -> preferences.edit().putString("api_endpoint", value).apply() },
+                    onConnect = { endpoint, callback ->
+                        executor.execute {
+                            val result = runCatching { fetchSnapshot(endpoint) }
+                            runOnUiThread { callback(result) }
                         }
                     }
-                }
-            } catch (error: Exception) {
-                runOnUiThread {
-                    status.text = "Falha de conexão: ${error.javaClass.simpleName}"
-                    nodes.text = "Nós registrados: indisponível"
-                    details.text = "Confira o endereço, a conexão de rede e se a API está ativa com HTTPS."
-                }
+                )
             }
         }
+    }
+
+    private fun fetchSnapshot(base: String): ApiSnapshot {
+        val root = base.trim().trimEnd('/')
+        require(root.startsWith("https://") || root.startsWith("http://10.0.2.2") ||
+            root.startsWith("http://127.0.0.1") || root.startsWith("http://localhost")) {
+            "Conexões remotas exigem HTTPS."
+        }
+        val health = JSONObject(get("$root/healthz"))
+        val overview = JSONObject(get("$root/api/v1/overview"))
+        val rawNodes = JSONArray(get("$root/api/v1/nodes"))
+        val parsedNodes = (0 until rawNodes.length()).map { index ->
+            val node = rawNodes.getJSONObject(index)
+            NodeInfo(
+                id = node.optString("node_id", node.optString("id", "Nó #${index + 1}")),
+                state = node.optString("state", node.optString("status", "Desconhecido")),
+                detail = node.optString("architecture", node.optString("hostname", "Inventário registrado"))
+            )
+        }
+        return ApiSnapshot(
+            status = health.optString("status", "online"),
+            service = overview.optString("service", "APOLO AX"),
+            controlPlane = overview.optString("control_plane", "—"),
+            persistence = overview.optString("persistence", "—"),
+            nodes = parsedNodes
+        )
     }
 
     private fun get(address: String): String {
@@ -129,15 +109,278 @@ class MainActivity : Activity() {
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val body = stream.bufferedReader().use { it.readText() }
-            if (code !in 200..299) error("HTTP $code")
+            check(code in 200..299) { "Servidor respondeu HTTP $code." }
             return body
-        } finally {
-            connection.disconnect()
-        }
+        } finally { connection.disconnect() }
     }
 
     override fun onDestroy() {
         executor.shutdownNow()
         super.onDestroy()
+    }
+}
+
+@Composable
+private fun ApoloTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            primary = Accent, secondary = Good, background = Navy, surface = Panel,
+            onPrimary = Navy, onBackground = TextPrimary, onSurface = TextPrimary
+        ),
+        content = content
+    )
+}
+
+@Composable
+private fun ApoloApplication(
+    initialEndpoint: String,
+    onSaveEndpoint: (String) -> Unit,
+    onConnect: (String, (Result<ApiSnapshot>) -> Unit) -> Unit
+) {
+    var selectedTab by remember { mutableStateOf(AppTab.HOME) }
+    var endpoint by remember { mutableStateOf(initialEndpoint) }
+    var snapshot by remember { mutableStateOf<ApiSnapshot?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("API ainda não conectada") }
+    var connected by remember { mutableStateOf(false) }
+
+    fun connect() {
+        loading = true
+        message = "Conectando ao control plane…"
+        onConnect(endpoint) { result ->
+            loading = false
+            result.onSuccess {
+                snapshot = it
+                connected = true
+                message = "API online · ${it.status}"
+            }.onFailure {
+                connected = false
+                message = it.message ?: "Não foi possível conectar"
+            }
+        }
+    }
+
+    Scaffold(
+        containerColor = Navy,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("APOLO", fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = Accent, fontSize = 12.sp)
+                        Text("Data Center", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 21.sp)
+                    }
+                },
+                actions = {
+                    Surface(
+                        color = if (connected) Good.copy(alpha = .14f) else Warning.copy(alpha = .14f),
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.padding(end = 16.dp)
+                    ) {
+                        Text(
+                            if (connected) "● ONLINE" else "● OFFLINE",
+                            color = if (connected) Good else Warning,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Navy)
+            )
+        },
+        bottomBar = {
+            NavigationBar(containerColor = Panel) {
+                AppTab.entries.forEach { tab ->
+                    NavigationBarItem(
+                        selected = selectedTab == tab,
+                        onClick = { selectedTab = tab },
+                        icon = { Text(tab.symbol, fontSize = 19.sp) },
+                        label = { Text(tab.label, fontSize = 10.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Accent, selectedTextColor = Accent,
+                            indicatorColor = Accent.copy(alpha = .14f),
+                            unselectedIconColor = TextMuted, unselectedTextColor = TextMuted
+                        )
+                    )
+                }
+            }
+        }
+    ) { padding ->
+        when (selectedTab) {
+            AppTab.HOME -> HomeScreen(Modifier.padding(padding), snapshot, message, loading, ::connect) { selectedTab = it }
+            AppTab.STORAGE -> CapabilityScreen(
+                Modifier.padding(padding), "Armazenamento AX", "Objetos, volumes e ingestão de dados",
+                listOf("Object Storage", "Upload e ingestão", "Integridade SHA-256", "Replicação e recuperação"),
+                "O AX Storage possui adapter local e verificação de integridade. A API ainda não expõe operações autenticadas de armazenamento."
+            )
+            AppTab.COMPUTE -> CapabilityScreen(
+                Modifier.padding(padding), "Computação AX", "Execução, filas e aceleradores",
+                listOf("AX Scheduler", "AX Compute", "AX Accelerator ISA", "Treinamento de modelos"),
+                "O scheduler e o runtime AX existem no núcleo Rust. Execução remota multiusuário e aceleradores físicos ainda não estão habilitados."
+            )
+            AppTab.PROJECTS -> CapabilityScreen(
+                Modifier.padding(padding), "Projetos", "Organize conjuntos de dados e workloads",
+                listOf("Projetos de IA", "Datasets", "Jobs de treinamento", "Histórico de execução"),
+                "A gestão persistente de projetos, usuários e jobs depende de autenticação e banco transacional."
+            )
+            AppTab.SETTINGS -> SettingsScreen(
+                Modifier.padding(padding), endpoint, { endpoint = it },
+                { onSaveEndpoint(endpoint); message = "Endereço salvo neste dispositivo." },
+                ::connect, message, loading
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeScreen(
+    modifier: Modifier, snapshot: ApiSnapshot?, message: String, loading: Boolean,
+    onConnect: () -> Unit, onOpen: (AppTab) -> Unit
+) {
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("PAINEL DE CONTROLE", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text("Sua infraestrutura,\nem um só lugar.", color = TextPrimary, fontSize = 27.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold)
+                Text("Visão operacional do APOLO AX", color = TextMuted, fontSize = 13.sp)
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("STATUS DO CONTROL PLANE", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Text(if (snapshot != null) "Conectado" else "Aguardando conexão", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Text(if (snapshot != null) "●" else "○", color = if (snapshot != null) Good else Warning, fontSize = 28.sp)
+                    }
+                    Text(message, color = TextMuted, fontSize = 12.sp)
+                    Button(onClick = onConnect, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+                        if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Text("Conectar e atualizar")
+                    }
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricCard("Nós registrados", snapshot?.nodes?.size?.toString() ?: "—", "Inventário real", Modifier.weight(1f))
+                MetricCard("Serviço", if (snapshot != null) "Ativo" else "—", snapshot?.service ?: "Sem leitura", Modifier.weight(1f))
+            }
+        }
+        item { Text("MÓDULOS DA PLATAFORMA", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp) }
+        item { ModuleCard("Armazenamento", "Dados, objetos e ingestão", "▤") { onOpen(AppTab.STORAGE) } }
+        item { ModuleCard("Computação", "Scheduler, jobs e AX Accelerator", "◈") { onOpen(AppTab.COMPUTE) } }
+        item { ModuleCard("Projetos de IA", "Datasets e treinamento de modelos", "▦") { onOpen(AppTab.PROJECTS) } }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = PanelAlt), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("CAPACIDADE VERIFICADA", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("Nenhuma capacidade é presumida.", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                    Text("CPU, RAM, discos e aceleradores só serão exibidos após inventário real e verificação independente.", color = TextMuted, fontSize = 12.sp)
+                }
+            }
+        }
+        if (snapshot != null) {
+            item { Text("NÓS DO CLUSTER", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp) }
+            items(snapshot.nodes) { node ->
+                Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(node.id, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                            Text(node.detail, color = TextMuted, fontSize = 11.sp)
+                        }
+                        Text(node.state, color = Good, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricCard(title: String, value: String, detail: String, modifier: Modifier = Modifier) {
+    Card(modifier, colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(title, color = TextMuted, fontSize = 11.sp)
+            Text(value, color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(detail, color = TextMuted, fontSize = 10.sp)
+        }
+    }
+}
+
+@Composable
+private fun ModuleCard(title: String, subtitle: String, symbol: String, onClick: () -> Unit) {
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(16.dp)) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(color = Accent.copy(alpha = .13f), shape = RoundedCornerShape(12.dp)) {
+                Text(symbol, color = Accent, fontSize = 22.sp, modifier = Modifier.padding(12.dp))
+            }
+            Column(Modifier.weight(1f).padding(start = 13.dp)) {
+                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = TextMuted, fontSize = 11.sp)
+            }
+            Text("›", color = Accent, fontSize = 25.sp)
+        }
+    }
+}
+
+@Composable
+private fun CapabilityScreen(modifier: Modifier, title: String, subtitle: String, capabilities: List<String>, limitation: String) {
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            Text("APOLO AX / MÓDULO", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+            Text(title, color = TextPrimary, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = TextMuted, fontSize = 13.sp)
+        }
+        items(capabilities) { capability ->
+            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp)) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("◇", color = Accent, fontSize = 19.sp)
+                    Text(capability, color = TextPrimary, modifier = Modifier.padding(start = 12.dp), fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = PanelAlt), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("STATUS DE IMPLEMENTAÇÃO", color = Warning, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("Integração em andamento", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                    Text(limitation, color = TextMuted, fontSize = 12.sp, lineHeight = 18.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    modifier: Modifier, endpoint: String, onEndpointChange: (String) -> Unit,
+    onSave: () -> Unit, onConnect: () -> Unit, message: String, loading: Boolean
+) {
+    Column(modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("CONFIGURAÇÕES", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Text("Conexão e dispositivo", color = TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text("Configure o endereço do servidor APOLO Data Center.", color = TextMuted, fontSize = 13.sp)
+        OutlinedTextField(
+            value = endpoint, onValueChange = onEndpointChange, modifier = Modifier.fillMaxWidth(),
+            label = { Text("URL da API") }, placeholder = { Text("https://seu-servidor") }, singleLine = true
+        )
+        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Salvar endereço") }
+        OutlinedButton(onClick = onConnect, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+            if (loading) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
+            else Text("Testar conexão")
+        }
+        Text(message, color = TextMuted, fontSize = 12.sp)
+        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("SEGURANÇA", color = Accent, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                Text("HTTPS obrigatório em servidores remotos", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("HTTP é permitido somente para loopback e o endereço especial do emulador Android. Não insira senhas ou tokens nesta tela.", color = TextMuted, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        Text("APOLO Data Center · Android nativo · v0.2.0", color = TextMuted, fontSize = 10.sp)
     }
 }
