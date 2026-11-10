@@ -255,7 +255,7 @@ async fn claim_worker_job(State(s):State<AppState>,Path(worker_id):Path<Uuid>,he
  let valid=sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM ax_workers WHERE id=$1 AND status='online' AND last_seen_at>NOW()-INTERVAL '90 seconds' AND ($2::uuid IS NULL OR user_id=$2))")
  .bind(worker_id).bind(owner).fetch_one(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  if !valid{return Err(StatusCode::FORBIDDEN)}
- let row=sqlx::query_as::<_,JobRow>("WITH candidate AS (SELECT id FROM training_jobs WHERE status='queued' AND ($1::uuid IS NULL OR user_id=$1) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE training_jobs j SET status='running',worker_id=$2,started_at=NOW(),updated_at=NOW() FROM candidate c WHERE j.id=c.id RETURNING j.id,j.project_id,j.model_id,j.status,j.config,j.metrics,j.checkpoint_key,j.worker_id,j.error,j.created_at,j.started_at,j.finished_at")
+ let row=sqlx::query_as::<_,JobRow>("WITH candidate AS (SELECT id FROM training_jobs WHERE status='queued' AND ($1::uuid IS NULL OR user_id=$1) ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE training_jobs j SET status='running',worker_id=$2,started_at=NOW(),updated_at=NOW() FROM candidate c WHERE j.id=c.id RETURNING j.id,j.project_id,j.model_id,j.status,j.config,j.metrics,j.checkpoint_key,j.worker_id,j.error,j.created_at,j.started_at,j.finished_at")
  .bind(owner).bind(worker_id).fetch_optional(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  match row {Some(job)=>Ok(Json(serde_json::to_value(job).map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?)),None=>Ok(Json(serde_json::Value::Null))}
 }
