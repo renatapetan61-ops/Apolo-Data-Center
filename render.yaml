@@ -1,0 +1,26 @@
+# Render Blueprint for APOLO Data Center API + managed PostgreSQL.
+# Deploying this blueprint creates paid services; review plan and pricing in Render first.
+services:
+  - type: web
+    name: apolo-ax-api
+    runtime: docker
+    region: ohio
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: APOLO_BIND_ADDR
+        value: 0.0.0.0:10000
+      - key: APOLO_API_TOKEN
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: apolo-postgres
+          property: connectionString
+
+databases:
+  - name: apolo-postgres
+    databaseName: apolo
+    user: apolo
+    region: ohio
+    plan: basic-256mb
