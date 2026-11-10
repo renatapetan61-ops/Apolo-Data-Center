@@ -17,3 +17,4 @@ tower = { version = "0.5", features = ["util"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 
 time = { version = "0.3", features = ["serde"] }
+subtle = "2"
