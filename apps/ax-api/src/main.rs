@@ -117,33 +117,43 @@ fn bearer(headers: &HeaderMap) -> Result<&str, StatusCode> {
     headers.get(axum::http::header::AUTHORIZATION).and_then(|v|v.to_str().ok())
         .and_then(|v|v.strip_prefix("Bearer ")).ok_or(StatusCode::UNAUTHORIZED)
 }
-async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), StatusCode> {
+async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<Option<uuid::Uuid>, StatusCode> {
     let supplied = bearer(headers)?;
     if let Some(expected) = state.api_token.as_deref() {
-        if bool::from(supplied.as_bytes().ct_eq(expected.as_bytes())) { return Ok(()); }
+        if bool::from(supplied.as_bytes().ct_eq(expected.as_bytes())) { return Ok(None); }
     }
     let db = database(state)?;
-    let valid = sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM api_tokens WHERE token_hash=$1)")
-        .bind(hash_token(supplied)).fetch_one(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
-    if valid { Ok(()) } else { Err(StatusCode::UNAUTHORIZED) }
+    sqlx::query_scalar::<_,uuid::Uuid>("UPDATE api_tokens SET last_used_at=NOW() WHERE token_hash=$1 RETURNING user_id")
+        .bind(hash_token(supplied)).fetch_optional(db).await
+        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.map(Some).ok_or(StatusCode::UNAUTHORIZED)
 }
 async fn list_projects(State(state):State<AppState>,headers:HeaderMap)->Result<Json<Vec<Project>>,StatusCode>{
-    authorize(&state,&headers).await?;
-    let rows=sqlx::query_as::<_,Project>("SELECT id,name,description,created_at FROM projects ORDER BY created_at DESC")
-        .fetch_all(database(&state)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let owner=authorize(&state,&headers).await?;
+    let rows=if let Some(user_id)=owner {
+        sqlx::query_as::<_,Project>("SELECT id,name,description,created_at FROM projects WHERE user_id=$1 ORDER BY created_at DESC")
+            .bind(user_id).fetch_all(database(&state)?).await
+    } else {
+        sqlx::query_as::<_,Project>("SELECT id,name,description,created_at FROM projects ORDER BY created_at DESC")
+            .fetch_all(database(&state)?).await
+    }.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(rows))
 }
 async fn create_project(State(state):State<AppState>,headers:HeaderMap,Json(input):Json<CreateProject>)->Result<(StatusCode,Json<Project>),StatusCode>{
-    authorize(&state,&headers).await?;
+    let owner=authorize(&state,&headers).await?;
     let name=input.name.trim();
     if name.is_empty()||name.len()>120||input.description.len()>4000{return Err(StatusCode::BAD_REQUEST)}
-    let project=sqlx::query_as::<_,Project>("INSERT INTO projects(name,description) VALUES($1,$2) RETURNING id,name,description,created_at")
-        .bind(name).bind(input.description.trim()).fetch_one(database(&state)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let project=sqlx::query_as::<_,Project>("INSERT INTO projects(name,description,user_id) VALUES($1,$2,$3) RETURNING id,name,description,created_at")
+        .bind(name).bind(input.description.trim()).bind(owner)
+        .fetch_one(database(&state)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok((StatusCode::CREATED,Json(project)))
 }
 async fn delete_project(State(state):State<AppState>,Path(id):Path<uuid::Uuid>,headers:HeaderMap)->Result<StatusCode,StatusCode>{
-    authorize(&state,&headers).await?;
-    let result=sqlx::query("DELETE FROM projects WHERE id=$1").bind(id).execute(database(&state)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let owner=authorize(&state,&headers).await?;
+    let result=if let Some(user_id)=owner {
+        sqlx::query("DELETE FROM projects WHERE id=$1 AND user_id=$2").bind(id).bind(user_id).execute(database(&state)?).await
+    } else {
+        sqlx::query("DELETE FROM projects WHERE id=$1").bind(id).execute(database(&state)?).await
+    }.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     if result.rows_affected()==0{return Err(StatusCode::NOT_FOUND)} Ok(StatusCode::NO_CONTENT)
 }
 fn app(state:AppState)->Router{
