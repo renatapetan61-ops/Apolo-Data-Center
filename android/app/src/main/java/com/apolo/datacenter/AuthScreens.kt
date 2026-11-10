@@ -59,6 +59,7 @@ internal fun AuthScreen(
 
 @Composable
 internal fun CreateTokenScreen(
+    modifier: Modifier = Modifier,
     loading: Boolean,
     message: String,
     token: String,
@@ -68,7 +69,7 @@ internal fun CreateTokenScreen(
 ) {
     var label by remember { mutableStateOf("Meu token do aplicativo") }
     val clipboard = LocalClipboardManager.current
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Button(
             onClick = onBack,
             modifier = Modifier.fillMaxWidth()
