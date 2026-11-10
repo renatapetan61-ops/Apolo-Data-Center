@@ -28,7 +28,7 @@ class VtaPlannerTests(unittest.TestCase):
     def test_100_novemdecillion_is_rejected(self):
         result = assess("100 novemdecillion", estimate_capacity([]))
         self.assertFalse(result["feasible"])
-        self.assertIn("fisicamente", result["reason"])
+        self.assertIn("capacidade física", result["reason"])
 
 
 if __name__ == "__main__":
