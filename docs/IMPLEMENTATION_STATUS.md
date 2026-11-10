@@ -143,3 +143,25 @@ Documentação: `docs/agents/ax-node-agent.md`.
 
 ## Proxima etapa
 Fase 8 — transporte seguro e persistente do plano de controle: HTTPS/mTLS, identidade criptográfica dos agentes, persistência transacional e integração do registro com Scheduler. Em paralelo, evoluir AX Compute com isolamento real do sistema operacional antes de habilitar execução remota.
+
+
+## Linha de engenharia paralela — AX Accelerator Architecture v0.1
+Status: contrato de ISA e validação de programas implementados; hardware ainda não implementado.
+
+Implementado:
+- Novo crate `apolo-ax-accelerator`, integrado ao workspace.
+- ISA preliminar própria AX v0.1 com NOP, LOAD, STORE, ADD, MULTIPLY, FMA, DOT PRODUCT, RELU, MATRIX MULTIPLY TILE e BARRIER.
+- Programas declaram versão ISA, registradores e região de memória.
+- Validação de operandos, registradores e limites de memória com detecção de overflow.
+- Descritor de dispositivo com arquitetura, versão ISA, memória e confiança.
+- Contrato `AcceleratorBackend` para futuros drivers de FPGA/ASIC.
+- Seis testes unitários escritos.
+
+Não implementado:
+- RTL SystemVerilog sintetizável, FPGA bitstream, ASIC, placa, driver, compilador, runtime de execução ou benchmark físico.
+- Nenhum desempenho de acelerador é declarado ou simulado como medição real.
+
+Documentação: `docs/accelerators/ax-architecture.md`.
+
+## Próxima etapa de infraestrutura
+Fase 8 permanece: canal de controle HTTPS/mTLS, identidade criptográfica e persistência transacional de agentes/leases. A linha AX Accelerator avança em paralelo para especificação binária e referência funcional antes do RTL.
