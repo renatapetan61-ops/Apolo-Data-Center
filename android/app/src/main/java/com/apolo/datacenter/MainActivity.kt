@@ -215,7 +215,7 @@ private fun ApoloApplication(
             endpoint = endpoint,
             loading = authLoading,
             message = authMessage,
-            onSubmit = { name, email, password, register, callback ->
+            onSubmit = { name, email, password, register ->
                 authLoading = true
                 authMessage = if (register) "Criando sua conta…" else "Validando seu acesso…"
                 onAuthenticate(endpoint, name, email, password, register) { result ->
@@ -229,7 +229,6 @@ private fun ApoloApplication(
                     }.onFailure { error ->
                         authMessage = error.message ?: "Não foi possível autenticar."
                     }
-                    callback(result)
                 }
             }
         )
