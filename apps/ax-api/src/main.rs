@@ -1,7 +1,7 @@
 use apolo_ax_scheduler::AxScheduler;
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::Html,
     routing::{delete, get},
     Json, Router,
@@ -9,11 +9,13 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{env, net::SocketAddr, sync::Arc};
+use subtle::ConstantTimeEq;
 
 #[derive(Clone)]
 struct AppState {
     scheduler: Arc<AxScheduler>,
     database: Option<PgPool>,
+    api_token: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -70,7 +72,11 @@ async fn nodes(State(state): State<AppState>) -> Result<Json<Vec<apolo_ax_core::
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-async fn list_projects(State(state): State<AppState>) -> Result<Json<Vec<Project>>, StatusCode> {
+async fn list_projects(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<Project>>, StatusCode> {
+    authorize(&headers, state.api_token.as_deref())?;
     let database = state.database.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let projects = sqlx::query_as::<_, Project>(
         "SELECT id, name, description, created_at FROM projects ORDER BY created_at DESC"
@@ -117,6 +123,19 @@ async fn delete_project(
     Ok(StatusCode::NO_CONTENT)
 }
 
+fn authorize(headers: &HeaderMap, configured: Option<&str>) -> Result<(), StatusCode> {
+    let expected = configured.ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let supplied = headers.get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    if bool::from(supplied.as_bytes().ct_eq(expected.as_bytes())) {
+        Ok(())
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
 fn app(state: AppState) -> Router {
     Router::new()
         .route("/", get(dashboard))
@@ -140,7 +159,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("DATABASE_URL not configured; persistent project API disabled");
         None
     };
-    let state = AppState { scheduler: Arc::new(AxScheduler::new()), database };
+    let api_token = env::var("APOLO_API_TOKEN").ok().filter(|value| value.len() >= 32);
+    if api_token.is_none() {
+        eprintln!("APOLO_API_TOKEN missing or shorter than 32 characters; project API writes disabled");
+    }
+    let state = AppState { scheduler: Arc::new(AxScheduler::new()), database, api_token };
     let listener = tokio::net::TcpListener::bind(address).await?;
     println!("APOLO AX API listening on {address}");
     axum::serve(listener, app(state))
@@ -156,7 +179,7 @@ mod tests {
     use tower::ServiceExt;
 
     fn test_state() -> AppState {
-        AppState { scheduler: Arc::new(AxScheduler::new()), database: None }
+        AppState { scheduler: Arc::new(AxScheduler::new()), database: None, api_token: None }
     }
 
     #[tokio::test]
@@ -185,7 +208,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn projects_are_not_reported_as_available_without_database() {
+    async fn projects_require_authentication_before_database_access() {
         let response = app(test_state()).oneshot(
             Request::builder().uri("/api/v1/projects").body(Body::empty()).unwrap()
         ).await.unwrap();
