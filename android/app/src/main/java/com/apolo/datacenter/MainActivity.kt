@@ -239,6 +239,7 @@ private fun ApoloApplication(
                 "O scheduler e o runtime AX existem no núcleo Rust. Execução remota multiusuário e aceleradores físicos ainda não estão habilitados."
             )
             AppTab.PROJECTS -> ProjectsScreen(
+                modifier = Modifier.padding(padding),
                 endpoint = endpoint,
                 token = apiToken,
                 onAction = { action, name, description, projectId, callback ->
@@ -406,7 +407,11 @@ private fun SettingsScreen(
             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
             singleLine = true
         )
-        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Salvar conexão e token") }
+        Button(
+            onClick = onSave,
+            enabled = token.isBlank() || token.length >= 32,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Salvar conexão e token") }
         OutlinedButton(onClick = onConnect, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
             if (loading) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp)
             else Text("Testar conexão")
