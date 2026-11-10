@@ -222,6 +222,10 @@ private fun ApoloApplication(
                     authLoading = false
                     result.onSuccess { session ->
                         sessionToken = session.accessToken
+                        if (session.apiToken.isNotBlank()) {
+                            apiToken = session.apiToken
+                            onSaveToken(session.apiToken)
+                        }
                         onSaveSession(session.accessToken)
                         authenticated = true
                         authMessage = ""
@@ -349,9 +353,7 @@ private fun ApoloApplication(
                     authenticated = false
                     sessionToken = ""
                     onSaveSession("")
-                    apiToken = ""
-                    onSaveToken("")
-                    authMessage = "Você saiu da sua conta."
+                    authMessage = "Você saiu da sua conta. O token permanece vinculado à sua conta e será restaurado no próximo acesso."
                 }
             )
         }
