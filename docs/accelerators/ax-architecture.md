@@ -54,3 +54,9 @@ Implementado neste incremento:
 - MATRIX MULTIPLY TILE é rejeitado explicitamente como não implementado, em vez de produzir resultado fictício.
 
 O runtime é uma referência de conformidade inicial, não um sandbox para código hostil. A memória é fornecida pelo chamador e a execução é síncrona. Ainda faltam formato binário congelado, ABI, inicialização explícita de registradores, semântica de tiles, vetores, interrupções, DMA, concorrência, compilador e driver físico.
+
+## AX Bytecode container experimental v0
+
+Foi adicionado um encoder/decoder binário versionado pelo cabeçalho ISA, com magic `AXBC`, inteiros little-endian, limite de 64 MiB, limite de 1.000.000 instruções, rejeição de opcode desconhecido, payload truncado e bytes excedentes. A decodificação valida o programa antes de retorná-lo.
+
+Este formato é experimental e ainda não é ABI congelada. Não é ainda um formato de objeto executável com relocations, símbolos, debug info, assinatura criptográfica ou compatibilidade garantida entre versões. Cinco testes cobrem round-trip e rejeição de entradas inválidas.
