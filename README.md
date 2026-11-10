@@ -16,14 +16,14 @@ O primeiro aplicativo utilizável está em `apps/ax-api`:
 - API HTTP Rust com `/healthz`, `/api/v1/overview` e `/api/v1/nodes`.
 - Painel web em português servido na rota `/`.
 - O painel mostra apenas inventários realmente registrados no scheduler em memória; não cria nós fictícios nem anuncia capacidade física inexistente.
-- O serviço ainda é single-process e volátil. Não há login, multi-tenancy, persistência PostgreSQL, cadastro remoto de agentes, TLS de produção nem execução de jobs via HTTP nesta versão.
+- A API oferece cadastro, listagem e exclusão de projetos com persistência PostgreSQL e token Bearer obrigatório.\n- O scheduler e inventário de nós continuam single-process e voláteis; agentes remotos, multi-tenancy, TLS de produção e execução de jobs via HTTP ainda não estão implementados.
 
 ## Execução local com Docker Compose
 
-1. Copie `infrastructure/.env.example` para `infrastructure/.env` e substitua todas as senhas de exemplo por segredos aleatórios fortes.
+1. Copie `infrastructure/.env.example` para `infrastructure/.env` e substitua todas as senhas e o `APOLO_API_TOKEN` por segredos aleatórios únicos. O token precisa ter pelo menos 32 caracteres.
 2. Na raiz do repositório, execute `docker compose --env-file infrastructure/.env -f infrastructure/compose.yaml up --build -d`.
 3. Abra `http://127.0.0.1:8080`; verifique `http://127.0.0.1:8080/healthz`.
-4. Os serviços auxiliares estão publicados somente em loopback. A API ainda não consome PostgreSQL, Redis ou MinIO; esses serviços estão preparados para as próximas integrações.
+4. Os serviços auxiliares estão publicados somente em loopback. A API usa PostgreSQL para persistir projetos; Redis e MinIO ainda não estão integrados ao runtime.
 
 Não publique esta versão diretamente na internet. Antes disso são necessários autenticação, autorização, TLS, persistência, rate limiting, auditoria, hardening e revisão de segurança.
 
