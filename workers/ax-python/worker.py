@@ -43,6 +43,17 @@ def hardware():
         "framework": "pytorch",
     }
 
+def telemetry():
+    data = {"ram_available_bytes": psutil.virtual_memory().available, "cpu_utilization_pct": psutil.cpu_percent(interval=None), "accelerator_kind": "cpu"}
+    try:
+        import torch
+        if torch.cuda.is_available():
+            free_bytes, _total_bytes = torch.cuda.mem_get_info(0)
+            data.update({"gpu_free_memory_bytes": int(free_bytes), "accelerator_kind": "cuda", "compute_capability": ".".join(map(str, torch.cuda.get_device_capability(0)))})
+    except Exception:
+        pass
+    return data
+
 def download(project_id, file_id, target):
     url = f"/api/v1/projects/{project_id}/files/{file_id}/download"
     response = call("GET", url, stream=True)
@@ -120,7 +131,7 @@ def main():
     print(f"APOLO AX worker registrado: {worker_id}", flush=True)
     while True:
         try:
-            call("POST", f"/api/v1/workers/{worker_id}/heartbeat")
+            call("POST", f"/api/v1/workers/{worker_id}/heartbeat", json=telemetry())
             job = call("POST", f"/api/v1/workers/{worker_id}/claim").json()
             if job:
                 run_job(worker_id, job)
