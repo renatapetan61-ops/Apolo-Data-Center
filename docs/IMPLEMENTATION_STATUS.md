@@ -193,7 +193,13 @@ Implementado:
 - Cabeçalho `AXBC`, campos little-endian e versão ISA.
 - Codificação/decodificação de instruções e operandos.
 - Limites de 64 MiB e 1.000.000 instruções.
-- Rejeição de magic inválido, opcode desconhecido, truncamento, operandos inválidos e bytes excedentes.
+- Rejeição de magic inválido, opcode desconhecido, truncamento, operandos inválidos e bytes excedentes.\n- Validação ISA reforçada para exigir destino apenas nas operações que produzem resultado e proibi-lo em NOP, BARRIER e STORE.
 - Cinco testes de round-trip e entradas malformadas.
 
 Limites: formato experimental, sem ABI congelada, relocations, símbolos, debug info, assinatura ou garantia de compatibilidade futura.
+
+Validação CI do AX Reference Runtime e Bytecode:
+- AX Reference Runtime: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42828489118 (sucesso).
+- AX Bytecode encoder/decoder: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42828603754 (sucesso).
+- Regras de operandos ISA: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42828633347 (sucesso).
+- Formatter, Clippy com `-D warnings` e testes do workspace aprovados nessas execuções.
