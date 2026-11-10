@@ -1,17 +1,19 @@
 use apolo_ax_scheduler::AxScheduler;
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::Html,
-    routing::get,
+    routing::{delete, get, post},
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{env, net::SocketAddr, sync::Arc};
 
 #[derive(Clone)]
 struct AppState {
     scheduler: Arc<AxScheduler>,
+    database: Option<PgPool>,
 }
 
 #[derive(Serialize)]
@@ -23,15 +25,31 @@ struct Overview {
     node_count: usize,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct Project {
+    id: uuid::Uuid,
+    name: String,
+    description: String,
+    created_at: time::OffsetDateTime,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateProject {
+    name: String,
+    #[serde(default)]
+    description: String,
+}
+
 async fn dashboard() -> Html<&'static str> {
     Html(include_str!("dashboard.html"))
 }
 
-async fn health() -> Json<serde_json::Value> {
+async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok",
         "service": "apolo-ax-api",
-        "version": env!("CARGO_PKG_VERSION")
+        "version": env!("CARGO_PKG_VERSION"),
+        "database": if state.database.is_some() { "connected" } else { "not_configured" }
     }))
 }
 
@@ -41,7 +59,7 @@ async fn overview(State(state): State<AppState>) -> Result<Json<Overview>, Statu
         service: "APOLO DATA CENTER",
         status: "operational",
         control_plane: "single_process",
-        persistence: "volatile_memory",
+        persistence: if state.database.is_some() { "postgresql_projects_scheduler_volatile" } else { "volatile_memory" },
         node_count: nodes.len(),
     }))
 }
@@ -52,12 +70,61 @@ async fn nodes(State(state): State<AppState>) -> Result<Json<Vec<apolo_ax_core::
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
+async fn list_projects(State(state): State<AppState>) -> Result<Json<Vec<Project>>, StatusCode> {
+    let database = state.database.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let projects = sqlx::query_as::<_, Project>(
+        "SELECT id, name, description, created_at FROM projects ORDER BY created_at DESC"
+    )
+    .fetch_all(database)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(projects))
+}
+
+async fn create_project(
+    State(state): State<AppState>,
+    Json(input): Json<CreateProject>,
+) -> Result<(StatusCode, Json<Project>), StatusCode> {
+    let database = state.database.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let name = input.name.trim();
+    if name.is_empty() || name.len() > 120 || input.description.len() > 4000 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let project = sqlx::query_as::<_, Project>(
+        "INSERT INTO projects (name, description) VALUES ($1, $2) RETURNING id, name, description, created_at"
+    )
+    .bind(name)
+    .bind(input.description.trim())
+    .fetch_one(database)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((StatusCode::CREATED, Json(project)))
+}
+
+async fn delete_project(
+    State(state): State<AppState>,
+    Path(project_id): Path<uuid::Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    let database = state.database.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let result = sqlx::query("DELETE FROM projects WHERE id = $1")
+        .bind(project_id)
+        .execute(database)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 fn app(state: AppState) -> Router {
     Router::new()
         .route("/", get(dashboard))
         .route("/healthz", get(health))
         .route("/api/v1/overview", get(overview))
         .route("/api/v1/nodes", get(nodes))
+        .route("/api/v1/projects", get(list_projects).post(create_project))
+        .route("/api/v1/projects/{project_id}", delete(delete_project))
         .with_state(state)
 }
 
@@ -65,7 +132,15 @@ fn app(state: AppState) -> Router {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bind = env::var("APOLO_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let address: SocketAddr = bind.parse()?;
-    let state = AppState { scheduler: Arc::new(AxScheduler::new()) };
+    let database = if let Ok(url) = env::var("DATABASE_URL") {
+        let pool = PgPoolOptions::new().max_connections(10).connect(&url).await?;
+        sqlx::migrate!("./migrations").run(&pool).await?;
+        Some(pool)
+    } else {
+        eprintln!("DATABASE_URL not configured; persistent project API disabled");
+        None
+    };
+    let state = AppState { scheduler: Arc::new(AxScheduler::new()), database };
     let listener = tokio::net::TcpListener::bind(address).await?;
     println!("APOLO AX API listening on {address}");
     axum::serve(listener, app(state))
@@ -80,27 +155,40 @@ mod tests {
     use axum::{body::{to_bytes, Body}, http::Request};
     use tower::ServiceExt;
 
+    fn test_state() -> AppState {
+        AppState { scheduler: Arc::new(AxScheduler::new()), database: None }
+    }
+
     #[tokio::test]
-    async fn health_endpoint_reports_service() {
-        let response = app(AppState { scheduler: Arc::new(AxScheduler::new()) })
-            .oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap())
-            .await.unwrap();
+    async fn health_endpoint_reports_service_and_database_state() {
+        let response = app(test_state()).oneshot(
+            Request::builder().uri("/healthz").body(Body::empty()).unwrap()
+        ).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let body = to_bytes(response.into_body(), 4096).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["service"], "apolo-ax-api");
         assert_eq!(json["status"], "ok");
+        assert_eq!(json["database"], "not_configured");
     }
 
     #[tokio::test]
     async fn overview_does_not_invent_physical_nodes() {
-        let response = app(AppState { scheduler: Arc::new(AxScheduler::new()) })
-            .oneshot(Request::builder().uri("/api/v1/overview").body(Body::empty()).unwrap())
-            .await.unwrap();
+        let response = app(test_state()).oneshot(
+            Request::builder().uri("/api/v1/overview").body(Body::empty()).unwrap()
+        ).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let body = to_bytes(response.into_body(), 4096).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["node_count"], 0);
         assert_eq!(json["persistence"], "volatile_memory");
+    }
+
+    #[tokio::test]
+    async fn projects_are_not_reported_as_available_without_database() {
+        let response = app(test_state()).oneshot(
+            Request::builder().uri("/api/v1/projects").body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }
