@@ -1,0 +1,28 @@
+name: APOLO VTA CI
+
+on:
+  push:
+    paths:
+      - "workers/virtual-accelerator/**"
+      - "workers/ax-python/worker.py"
+      - "apps/ax-api/src/workspace.rs"
+      - "apps/ax-api/migrations/0007_vta_worker_telemetry.sql"
+      - ".github/workflows/vta-ci.yml"
+  pull_request:
+    paths:
+      - "workers/virtual-accelerator/**"
+      - "workers/ax-python/worker.py"
+      - "apps/ax-api/src/workspace.rs"
+      - "apps/ax-api/migrations/0007_vta_worker_telemetry.sql"
+
+jobs:
+  vta-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check "requests>=2.32,<3"
+      - run: python -m py_compile workers/virtual-accelerator/apolo_vta.py workers/ax-python/worker.py
+      - run: python -m unittest discover -s workers/virtual-accelerator -p "test_*.py" -v
