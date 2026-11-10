@@ -131,6 +131,7 @@ private fun ApoloTheme(content: @Composable () -> Unit) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ApoloApplication(
     initialEndpoint: String,
