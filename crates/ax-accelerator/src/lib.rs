@@ -1,10 +1,10 @@
 //! APOLO AX accelerator architecture contracts.
-
-pub mod reference_runtime;
-pub mod bytecode;
 //!
 //! This crate defines an original, versioned command model and backend boundary.
 //! It does not emulate physical performance or claim to drive hardware yet.
+
+pub mod reference_runtime;
+pub mod bytecode;
 
 use apolo_ax_core::ResourceId;
 use serde::{Deserialize, Serialize};
