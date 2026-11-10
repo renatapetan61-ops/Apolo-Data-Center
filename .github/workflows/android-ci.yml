@@ -12,7 +12,7 @@ on:
       - ".github/workflows/android-ci.yml"
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -51,14 +51,18 @@ jobs:
           APOLO_RELEASE_KEY_ALIAS: ${{ secrets.APOLO_RELEASE_KEY_ALIAS }}
           APOLO_RELEASE_KEY_PASSWORD: ${{ secrets.APOLO_RELEASE_KEY_PASSWORD }}
         run: |
-          gradle --no-daemon assembleRelease
+          gradle --no-daemon clean assembleRelease
           APK="app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/apk-badging.txt"
+          grep -q "package: name='com.apolo.datacenter'" "$RUNNER_TEMP/apk-badging.txt"
+          sha256sum "$APK" | tee "$RUNNER_TEMP/apk-sha256.txt"
       - name: Explain why signed release was skipped
         if: env.RELEASE_SIGNING_READY != 'true'
         run: |
-          echo "::notice::Release APK was not built: configure the four APOLO_RELEASE_* repository secrets with one persistent keystore. The debug APK is signed by the Android debug key and is installable for testing."
+          echo "::error::Release APK not generated: configure all four APOLO_RELEASE_* repository secrets."
+          exit 1
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -66,11 +70,24 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Upload signed release APK
-        if: env.RELEASE_SIGNING_READY == 'true'
+      - name: Upload signed release APK as workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: apolo-data-center-signed-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
+      - name: Publish APK in GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apolo-data-center-v0.2.0-build-${{ github.run_number }}
+          name: APOLO Data Center Android v0.2.0 (build ${{ github.run_number }})
+          body: |
+            APK Release assinado do APOLO Data Center.
+            
+            Instalação: baixe o arquivo APK em Assets e abra-o no Android.
+            Arquitetura: APK universal; não restringe o pacote a uma ABI específica.
+          files: android/app/build/outputs/apk/release/app-release.apk
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          make_latest: true
