@@ -39,3 +39,18 @@ O descritor identifica recurso, nó, arquitetura, versão ISA, registradores e m
 7. Só então avaliar ASIC, fabricação, encapsulamento, alimentação e validação elétrica.
 
 O software pode ser desenvolvido sem placa, mas execução física e desempenho só serão demonstrados em hardware real.
+
+## AX Reference Runtime — primeiro incremento
+
+O módulo `reference_runtime` interpreta programas AX em CPU comum para validar semântica funcional. Ele não simula frequência, paralelismo, latência ou desempenho de um acelerador físico.
+
+Implementado neste incremento:
+- Registradores de 64 bits inicializados em zero.
+- LOAD/STORE little-endian para larguras de 1, 2, 4 ou 8 bytes.
+- ADD, MULTIPLY, FUSED MULTIPLY-ADD e RELU com semântica inteira definida; operações aritméticas usam wrap modulo 2^64.
+- DOT PRODUCT, nesta versão escalar, calcula o produto de dois valores; produto vetorial/acumulado ainda requer definição formal.
+- NOP e BARRIER são operações sem efeito no interpretador sequencial.
+- Limite de instruções por execução e verificação de que a região declarada cabe no buffer fornecido.
+- MATRIX MULTIPLY TILE é rejeitado explicitamente como não implementado, em vez de produzir resultado fictício.
+
+O runtime é uma referência de conformidade inicial, não um sandbox para código hostil. A memória é fornecida pelo chamador e a execução é síncrona. Ainda faltam formato binário congelado, ABI, inicialização explícita de registradores, semântica de tiles, vetores, interrupções, DMA, concorrência, compilador e driver físico.
