@@ -48,7 +48,7 @@ impl DataFormat {
             }
             Self::Csv => std::str::from_utf8(bytes).is_ok()
                 && bytes.contains(&b',')
-                && bytes.iter().any(|byte| *byte == b'\n'),
+                && bytes.contains(&b'\n'),
             Self::Txt => std::str::from_utf8(bytes).is_ok(),
             Self::Pdf => bytes.starts_with(b"%PDF-"),
             Self::Docx => bytes.starts_with(b"PK\x03\x04"),
