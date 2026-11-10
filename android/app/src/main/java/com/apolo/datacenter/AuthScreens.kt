@@ -71,7 +71,7 @@ internal fun CreateTokenScreen(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Text("→", color = Color(0xFFEAF1FC), fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                Text("←", color = Color(0xFFEAF1FC), fontSize = 30.sp, fontWeight = FontWeight.Bold)
             }
         }
         Text("SEGURANÇA / API", color = Color(0xFF78A9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
