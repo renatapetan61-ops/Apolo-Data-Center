@@ -270,8 +270,8 @@ mod tests {
     fn stale_agent_is_marked_offline() {
         let registry = registry();
         registry.register(registration()).unwrap();
-        assert_eq!(registry.expire_stale(1_800_000_031).unwrap(), 0);
-        assert_eq!(registry.expire_stale(1_800_000_032).unwrap(), 1);
+        assert_eq!(registry.expire_stale(1_800_000_030).unwrap(), 0);
+        assert_eq!(registry.expire_stale(1_800_000_031).unwrap(), 1);
         assert_eq!(registry.get("node-1").unwrap().inventory.state, NodeState::Offline);
     }
 
