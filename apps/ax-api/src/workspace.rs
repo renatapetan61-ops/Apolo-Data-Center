@@ -89,12 +89,99 @@ async fn delete_file(State(s):State<AppState>,Path((pid,fid)):Path<(Uuid,Uuid)>,
  .bind(fid).bind(pid).bind(owner).fetch_optional(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
  let _=tokio::fs::remove_file(storage_root()?.join(row.0)).await; Ok(StatusCode::NO_CONTENT)
 }
+
+async fn persist_generated_file(db:&sqlx::PgPool,root:&FsPath,pid:Uuid,owner:Option<Uuid>,name:&str,kind:&str,content:&str)->Result<(),StatusCode>{
+ let key=format!("{pid}/generated/{}-{name}",Uuid::new_v4());
+ let path=root.join(&key);
+ if let Some(parent)=path.parent(){std::fs::create_dir_all(parent).map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;}
+ tokio::fs::write(&path,content.as_bytes()).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ let digest=format!("{:x}",Sha256::digest(content.as_bytes()));
+ sqlx::query("INSERT INTO project_files(project_id,user_id,filename,content_type,size_bytes,sha256,storage_key,kind) VALUES($1,$2,$3,'text/plain; charset=utf-8',$4,$5,$6,$7)")
+ .bind(pid).bind(owner).bind(name).bind(content.len() as i64).bind(digest).bind(key).bind(kind)
+ .execute(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ Ok(())
+}
+
 async fn create_model(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderMap,Json(input):Json<ModelInput>)->Result<(StatusCode,Json<ModelRow>),StatusCode>{
  let owner=authorize(&s,&headers).await?; owned_project(&s,&headers,pid).await?;
  if input.name.trim().is_empty()||input.name.len()>160||input.parameters.unwrap_or(0)<0{return Err(StatusCode::BAD_REQUEST)}
+ let db=database(&s)?;
+ let root=storage_root()?;
  let row=sqlx::query_as::<_,ModelRow>("INSERT INTO project_models(project_id,user_id,name,architecture,parameters,config) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,name,architecture,parameters,config,status,created_at")
  .bind(pid).bind(owner).bind(input.name.trim()).bind(input.architecture).bind(input.parameters).bind(input.config)
- .fetch_one(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ .fetch_one(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ let config=serde_json::json!({"name":row.name,"architecture":row.architecture,"parameters":row.parameters,"d_model":256,"n_heads":8,"n_layers":4,"vocab_size":32000,"max_seq_len":2048,"framework":"pytorch"});
+ let config_text=serde_json::to_string_pretty(&config).map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ let model_py=r#"import torch
+from torch import nn
+
+class ApoloDecoderLM(nn.Module):
+    def __init__(self, vocab_size=32000, d_model=256, n_heads=8, n_layers=4, max_seq_len=2048):
+        super().__init__()
+        self.token_embedding = nn.Embedding(vocab_size, d_model)
+        self.position_embedding = nn.Embedding(max_seq_len, d_model)
+        layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=n_heads, batch_first=True, norm_first=True)
+        self.encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
+        self.norm = nn.LayerNorm(d_model)
+        self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
+        self.max_seq_len = max_seq_len
+    def forward(self, input_ids):
+        batch, length = input_ids.shape
+        if length > self.max_seq_len:
+            raise ValueError("sequence exceeds max_seq_len")
+        positions = torch.arange(length, device=input_ids.device).unsqueeze(0)
+        x = self.token_embedding(input_ids) + self.position_embedding(positions)
+        mask = torch.triu(torch.ones(length, length, device=input_ids.device, dtype=torch.bool), diagonal=1)
+        return self.lm_head(self.norm(self.encoder(x, mask=mask)))
+"#;
+ let train_py=r#"import argparse, json, os
+import torch
+from torch.nn import functional as F
+from torch.utils.data import Dataset, DataLoader
+from model import ApoloDecoderLM
+
+class TokenDataset(Dataset):
+    def __init__(self, path, seq_len):
+        self.rows=[]
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                row=json.loads(line)
+                ids=row.get("input_ids")
+                if ids and len(ids)>seq_len: self.rows.append(ids)
+        self.seq_len=seq_len
+    def __len__(self): return len(self.rows)
+    def __getitem__(self, i):
+        ids=torch.tensor(self.rows[i][:self.seq_len+1],dtype=torch.long)
+        return ids[:-1],ids[1:]
+
+def main():
+    p=argparse.ArgumentParser()
+    p.add_argument("--data",required=True);p.add_argument("--output",default="checkpoints")
+    p.add_argument("--epochs",type=int,default=1);p.add_argument("--batch-size",type=int,default=2)
+    p.add_argument("--seq-len",type=int,default=512);p.add_argument("--lr",type=float,default=3e-4)
+    p.add_argument("--vocab-size",type=int,default=32000)
+    a=p.parse_args();device="cuda" if torch.cuda.is_available() else "cpu"
+    ds=TokenDataset(a.data,a.seq_len)
+    if not len(ds): raise RuntimeError("No tokenized input_ids records found in JSONL dataset")
+    loader=DataLoader(ds,batch_size=a.batch_size,shuffle=True)
+    model=ApoloDecoderLM(vocab_size=a.vocab_size,max_seq_len=a.seq_len).to(device)
+    opt=torch.optim.AdamW(model.parameters(),lr=a.lr)
+    os.makedirs(a.output,exist_ok=True);step=0
+    for epoch in range(a.epochs):
+        model.train()
+        for x,y in loader:
+            x=x.to(device);y=y.to(device);opt.zero_grad(set_to_none=True)
+            logits=model(x);loss=F.cross_entropy(logits.reshape(-1,a.vocab_size),y.reshape(-1))
+            loss.backward();torch.nn.utils.clip_grad_norm_(model.parameters(),1.0);opt.step();step+=1
+            if step%100==0: print(json.dumps({"step":step,"epoch":epoch,"loss":loss.item(),"device":device}),flush=True)
+        torch.save({"model":model.state_dict(),"optimizer":opt.state_dict(),"epoch":epoch,"step":step},os.path.join(a.output,f"checkpoint-{step}.pt"))
+if __name__=="__main__": main()
+"#;
+ let readme=format!("# {}\n\nScaffold inicial, nao um modelo pre-treinado.\n\nArquivos: model_config.json, model.py e train.py.\n\nForneca JSONL com input_ids ja tokenizados e vocabulario compativel. O tokenizer deve ser implementado e validado antes do treino.\n\nInstale PyTorch e execute python train.py --data dataset.jsonl. A execucao de producao depende de worker AX real.",row.name);
+ persist_generated_file(db,&root,pid,owner,"model_config.json","config",&config_text).await?;
+ persist_generated_file(db,&root,pid,owner,"model.py","file",model_py).await?;
+ persist_generated_file(db,&root,pid,owner,"train.py","file",train_py).await?;
+ persist_generated_file(db,&root,pid,owner,"README-LLM.md","file",&readme).await?;
  Ok((StatusCode::CREATED,Json(row)))
 }
 async fn list_models(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderMap)->Result<Json<Vec<ModelRow>>,StatusCode>{
