@@ -228,17 +228,17 @@ Documentação: `docs/deployment/application-and-deployment.md`.
 
 ## Aplicativo Android nativo APOLO Data Center
 
-Status: primeiro MVP Kotlin adicionado; compilação Android via CI pendente.
+Status: aplicativo Android nativo em Kotlin + Jetpack Compose/Material 3 implementado; compilação Android via CI pendente.
 
 Implementado:
 - Projeto Android Gradle em `android/`, Kotlin, namespace `com.apolo.datacenter`, minSdk 26, target/compileSdk 36.
-- Activity nativa sem WebView, tela de estado, endpoint configurável, botão de conexão e leitura de health/overview/inventário.
+- Interface nativa Jetpack Compose + Material 3, sem WebView, com navegação Início/Dados/Compute/Projetos/Ajustes.\n- Dashboard com status da API, métricas e inventário retornados pelo backend; falhas de conexão não são confundidas com inventário vazio.\n- Endpoint configurável e salvo localmente, conexão em executor separado, timeouts e HTTPS obrigatório para hosts remotos.\n- Telas de módulos distinguem capacidades já existentes no núcleo Rust de operações que ainda dependem de APIs autenticadas.
 - HTTPS obrigatório para hosts remotos; HTTP permitido apenas para loopback e endereço do emulador via Network Security Config.
 - Workflow `.github/workflows/android-ci.yml` para construir Debug e Release e guardar APKs como artifacts.
 
 Ainda não implementado:
 - JNI/UniFFI para integrar crates Rust dentro do processo Android.
-- Autenticação, armazenamento seguro de tokens, enrollment de agentes, push de telemetria e notificações.
+- Autenticação, armazenamento seguro de tokens, enrollment de agentes, push de telemetria e notificações.\n- Integração JNI/UniFFI dos crates Rust, API persistente de storage/jobs/projetos e fluxos funcionais de upload e treinamento.\n- Design Figma: arquivo criado; edição de camadas bloqueada temporariamente pelo limite de chamadas MCP Starter. Especificação versionada em `docs/android/design-system.md`.
 - Assinatura de Release por keystore e publicação na Play Store.
 - Backend distribuído persistente e endpoint HTTPS real. O domínio de exemplo na tela deve ser substituído após a implantação do servidor.
 
