@@ -243,3 +243,21 @@ Ainda não implementado:
 - Backend distribuído persistente e endpoint HTTPS real. O domínio de exemplo na tela deve ser substituído após a implantação do servidor.
 
 O painel web é complementar. O aplicativo Android nativo é o cliente principal.
+
+
+## API persistente de projetos — incremento 2026-11-10
+
+Implementado no backend Rust:
+- PostgreSQL opcional via `DATABASE_URL`, pool SQLx e migração automática `apps/ax-api/migrations/0001_projects.sql`.
+- Endpoints `GET/POST /api/v1/projects` e `DELETE /api/v1/projects/{project_id}`.
+- Validação de nome/descrição e UUIDs; projeto persistido com timestamp no PostgreSQL.
+- Token Bearer obrigatório para todos os endpoints de projetos, comparado em tempo constante; token ausente/inválido bloqueia acesso.
+- Compose conecta API ao PostgreSQL com healthcheck e injeta token obrigatório via `APOLO_API_TOKEN`; segredo documentado em `infrastructure/.env.example`.
+- Testes API cobrem health, ausência de inventário fictício e bloqueio do endpoint de projetos sem configuração/autenticação.
+
+Limitações ainda abertas:
+- Scheduler e registro de nós ainda são voláteis e não estão ligados a PostgreSQL.
+- Token atual é segredo compartilhado de API, não autenticação de usuário, sessões, RBAC ou multi-tenancy.
+- Endpoints de storage, ingestion e compute ainda não foram expostos ao app.
+- Redis e MinIO continuam sem integração ao runtime; TLS de produção e agentes remotos ainda faltam.
+- APK Debug/Release foram compilados com sucesso pelo workflow Android anterior (run 42834002555); mudanças futuras no app devem disparar nova validação.
