@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ax-core", "crates/ax-scheduler"]
+members = ["crates/ax-core", "crates/ax-scheduler", "crates/ax-storage"]
 
 [workspace.package]
 version = "0.1.0"
