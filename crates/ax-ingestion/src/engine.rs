@@ -1,7 +1,7 @@
 use crate::{DataFormat, IngestionError, IngestionResult};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
@@ -55,8 +55,8 @@ pub struct QueuedEntry {
 struct State {
     queue: VecDeque<QueuedEntry>,
     seen: HashSet<(String, String)>,
-    recent_entries: VecDeque<i64>,
-    last_received_at: Option<i64>,
+    recent_entries: HashMap<String, VecDeque<i64>>,
+    last_received_at: HashMap<String, i64>,
 }
 
 #[derive(Clone)]
@@ -96,17 +96,18 @@ impl IngestionService {
         if state.queue.len() >= self.config.queue_capacity {
             return Err(IngestionError::QueueFull);
         }
-        if let Some(last) = state.last_received_at {
-            if input.received_at_unix < last {
-                return Err(IngestionError::InvalidConfiguration);
-            }
+        if state.last_received_at.get(&input.project_id)
+            .is_some_and(|last| input.received_at_unix < *last)
+        {
+            return Err(IngestionError::InvalidConfiguration);
         }
 
         let window_start = input.received_at_unix.saturating_sub(3_600);
-        while state.recent_entries.front().is_some_and(|timestamp| *timestamp <= window_start) {
-            state.recent_entries.pop_front();
+        let project_entries = state.recent_entries.entry(input.project_id.clone()).or_default();
+        while project_entries.front().is_some_and(|timestamp| *timestamp <= window_start) {
+            project_entries.pop_front();
         }
-        if state.recent_entries.len() >= self.config.max_entries_per_hour {
+        if project_entries.len() >= self.config.max_entries_per_hour {
             return Err(IngestionError::RateLimitExceeded);
         }
 
@@ -130,8 +131,8 @@ impl IngestionService {
             bytes: input.bytes,
         });
         state.seen.insert(dedupe_key);
-        state.recent_entries.push_back(input.received_at_unix);
-        state.last_received_at = Some(input.received_at_unix);
+        state.recent_entries.entry(receipt.project_id.clone()).or_default().push_back(input.received_at_unix);
+        state.last_received_at.insert(receipt.project_id.clone(), input.received_at_unix);
         Ok(receipt)
     }
 
