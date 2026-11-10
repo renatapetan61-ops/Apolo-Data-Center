@@ -54,8 +54,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor = AndroidColor.rgb(11, 18, 32)
         window.navigationBarColor = AndroidColor.rgb(11, 18, 32)
-        val initialEndpoint = preferences.getString("api_endpoint", "https://api.apolo-datacenter.example")
-            ?: "https://api.apolo-datacenter.example"
+        val initialEndpoint = preferences.getString("api_endpoint", "https://apolo-ax-api-production.up.railway.app")
+            ?: "https://apolo-ax-api-production.up.railway.app"
         val initialToken = SecureTokenStore.read(this)
         setContent {
             ApoloTheme {
