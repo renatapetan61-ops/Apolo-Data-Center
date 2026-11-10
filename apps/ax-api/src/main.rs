@@ -13,14 +13,15 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{env, net::SocketAddr, sync::Arc};
-use subtle::ConstantTimeEq;\nmod workspace;
+use subtle::ConstantTimeEq;
+mod workspace;
 use time::{Duration, OffsetDateTime};
 
 #[derive(Clone)]
-struct AppState {
-    scheduler: Arc<AxScheduler>,
-    database: Option<PgPool>,
-    api_token: Option<String>,
+pub(crate) struct AppState {
+    pub(crate) scheduler: Arc<AxScheduler>,
+    pub(crate) database: Option<PgPool>,
+    pub(crate) api_token: Option<String>,
 }
 #[derive(Serialize)]
 struct Overview {
@@ -57,7 +58,7 @@ async fn overview(State(state): State<AppState>) -> Result<Json<Overview>, Statu
 async fn nodes(State(state): State<AppState>) -> Result<Json<Vec<apolo_ax_core::NodeInventory>>, StatusCode> {
     state.scheduler.list_nodes().map(Json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
-pub(crate) fn database(state: &AppState) -> Result<&PgPool, StatusCode> { state.database.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE) }
+pub(crate) pub(crate) fn database(state: &AppState) -> Result<&PgPool, StatusCode> { state.database.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE) }
 fn hash_token(token: &str) -> String { format!("{:x}", Sha256::digest(token.as_bytes())) }
 fn token_cipher() -> Result<Aes256Gcm, StatusCode> {
     let secret = env::var("APOLO_TOKEN_ENCRYPTION_KEY").map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
@@ -151,7 +152,7 @@ fn bearer(headers: &HeaderMap) -> Result<&str, StatusCode> {
     headers.get(axum::http::header::AUTHORIZATION).and_then(|v|v.to_str().ok())
         .and_then(|v|v.strip_prefix("Bearer ")).ok_or(StatusCode::UNAUTHORIZED)
 }
-pub(crate) async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<Option<uuid::Uuid>, StatusCode> {
+pub(crate) pub(crate) async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<Option<uuid::Uuid>, StatusCode> {
     let supplied = bearer(headers)?;
     if let Some(expected) = state.api_token.as_deref() {
         if bool::from(supplied.as_bytes().ct_eq(expected.as_bytes())) { return Ok(None); }
@@ -196,7 +197,8 @@ fn app(state:AppState)->Router{
         .route("/api/v1/auth/register",post(register)).route("/api/v1/auth/login",post(login))
         .route("/api/v1/tokens",post(create_api_token).get(get_active_api_token))
         .route("/api/v1/projects",get(list_projects).post(create_project))
-        .route("/api/v1/projects/{project_id}",delete(delete_project))\n        .merge(workspace::router()).with_state(state)
+        .route("/api/v1/projects/{project_id}",delete(delete_project))
+        .merge(workspace::router()).with_state(state)
 }
 #[tokio::main]
 async fn main()->Result<(),Box<dyn std::error::Error>>{
