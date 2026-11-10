@@ -36,7 +36,7 @@ Status: pipeline local inicial implementado e validado.
 Pendências: fila durável/distribuída, dedupe persistente, análise profunda de arquivos, antivírus/sandbox, OCR, codecs, validação MIME e integração direta ao Storage.
 
 ## Fase 5 — AX Scheduler
-Status: primeira versão implementada e validada; refinamento adicional de inventário em CI.
+Status: primeira versão implementada e validada em CI.
 - Registro/atualização de inventários e colocação best-fit determinística.
 - Reserva atômica em processo de CPU, memória, storage, rede e aceleradores.
 - Prevenção de dupla alocação concorrente dentro de uma instância.
@@ -48,7 +48,7 @@ Limites: estado em memória, sem persistência após restart, sem coordenação 
 Status: executor local inicial implementado e validado em CI.
 - ComputeJob com programa, argumentos, ambiente, diretório, timeout e ID de reserva.
 - ExecutionPolicy com allowlist de executáveis canônicos, raiz de sandbox, timeout máximo e limite de stdout/stderr.
-- ProcessExecutor exige reserva ativa do Scheduler pertencente ao mesmo job.
+- ProcessExecutor exige reserva ativa do Scheduler pertencente ao mesmo job e libera a reserva após a tentativa de execução.
 - Execução sem shell, ambiente limpo, bloqueio de PATH/LD_* e diretório confinado à raiz configurada.
 - Timeout com encerramento de processo, drenagem de stdout/stderr e saída limitada.
 - ExecutionReceipt com código de saída, duração, timeout e saída.
@@ -62,10 +62,9 @@ GitHub Actions prepara e verifica:
 - Java 21.
 
 Execução de validação que incluiu AX Core, Storage, Ingestion, Scheduler e Compute:
-https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42826361515
+https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42826456655
 
-Resultado: formatter, Clippy com -D warnings e 35 testes unitários aprovados (15 Core, 4 Storage, 6 Ingestion, 6 Scheduler e 4 Compute). Refinamento posterior de inventário do Scheduler está sendo validado em:
-https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42826397854
+Resultado: formatter, Clippy com -D warnings e 35 testes unitários aprovados (15 Core, 4 Storage, 6 Ingestion, 6 Scheduler e 4 Compute). O CI mais recente também valida os ajustes de contabilização de rede/aceleradores e liberação da reserva pelo executor.
 
 ## Próximas etapas
 1. AX Compute worker daemon, isolamento Linux real (cgroups v2, namespaces, seccomp) e agentes de nó autenticados.
