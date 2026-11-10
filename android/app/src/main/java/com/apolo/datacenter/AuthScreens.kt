@@ -20,7 +20,7 @@ internal fun AuthScreen(
     endpoint: String,
     loading: Boolean,
     message: String,
-    onSubmit: (String, String, String, Boolean, (Result<AuthSession>) -> Unit) -> Unit
+    onSubmit: (String, String, String, Boolean) -> Unit
 ) {
     var registering by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
@@ -43,7 +43,7 @@ internal fun AuthScreen(
                 OutlinedTextField(password, { password = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Senha (mínimo 10 caracteres)") }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
                 if (message.isNotBlank()) Text(message, color = Color(0xFFF3C46B), fontSize = 12.sp)
                 Button(
-                    onClick = { onSubmit(name.trim(), email.trim(), password, registering) { } },
+                    onClick = { onSubmit(name.trim(), email.trim(), password, registering) },
                     enabled = !loading && email.contains("@") && password.length >= 10 && (!registering || name.isNotBlank()),
                     modifier = Modifier.fillMaxWidth()
                 ) { if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text(if (registering) "Criar conta" else "Entrar") }
