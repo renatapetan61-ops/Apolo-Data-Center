@@ -26,3 +26,22 @@ O primeiro aplicativo utilizável está em `apps/ax-api`:
 4. Os serviços auxiliares estão publicados somente em loopback. A API ainda não consome PostgreSQL, Redis ou MinIO; esses serviços estão preparados para as próximas integrações.
 
 Não publique esta versão diretamente na internet. Antes disso são necessários autenticação, autorização, TLS, persistência, rate limiting, auditoria, hardening e revisão de segurança.
+
+
+## Aplicativo Android nativo (Kotlin)
+
+O aplicativo principal para o usuário é Android nativo e está em `android/`:
+- Kotlin + Android Gradle Plugin, sem depender do painel web para funcionar como aplicativo.
+- Tela nativa com configuração do endpoint, conexão à API, health check, overview e inventário de nós.
+- Rejeita HTTP em hosts remotos; HTTPS é obrigatório fora de loopback/emulador local.
+- Build Android separado para APK Debug e Release no GitHub Actions.
+
+O painel web em `apps/ax-api` é apenas uma interface complementar de administração/API, não o aplicativo Android.
+
+### Compilar APK
+
+O workflow `.github/workflows/android-ci.yml` executa `assembleDebug` e `assembleRelease` e publica os APKs como artifact do GitHub Actions. Para instalar o Debug, baixe o artifact da execução concluída e instale o arquivo APK no Android. O Release produzido nesta etapa não está assinado para distribuição; a assinatura exige configurar um keystore e secrets de assinatura no GitHub.
+
+O endpoint inicial `https://api.apolo-datacenter.example` é um placeholder. Troque pelo endereço HTTPS real do servidor quando a API estiver implantada. A API atual ainda usa scheduler em memória e não registra agentes remotos.
+
+A integração JNI entre Kotlin e bibliotecas Rust, armazenamento local seguro de credenciais, autenticação de usuário e push de inventário de agentes ainda não foram implementados.
