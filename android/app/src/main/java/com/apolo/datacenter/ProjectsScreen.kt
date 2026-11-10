@@ -137,8 +137,8 @@ internal fun ProjectsScreen(
                 OutlinedTextField(parameters,{parameters=it},modifier=Modifier.fillMaxWidth(),label={Text("Parâmetros (quantidade)")})
                 Button(onClick={
                     busy=true
-                    onWorkspaceAction(p.id,"MODEL",modelName,parameters){r->busy=false;r.onSuccess{message="Registro do modelo criado."}.onFailure{message=it.message?:"Erro"};refreshWorkspace(p)}
-                },enabled=modelName.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("Criar modelo")}
+                    onWorkspaceAction(p.id,"MODEL",modelName,parameters+"\n"+assistantOutput){r->busy=false;r.onSuccess{message="Kimi gerou e armazenou os arquivos do LLM."}.onFailure{message=it.message?:"Erro"};refreshWorkspace(p)}
+                },enabled=modelName.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("Gerar arquivos do LLM com Kimi")}
                 models.forEach { model -> Text("• "+model.optString("name")+" · "+model.optString("architecture")+" · "+model.optString("status"),color=Color(0xFFEAF1FC),fontSize=12.sp) }
             }
             item {
