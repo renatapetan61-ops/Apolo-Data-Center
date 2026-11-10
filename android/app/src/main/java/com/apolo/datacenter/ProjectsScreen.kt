@@ -139,7 +139,7 @@ internal fun ProjectsScreen(
                     busy=true
                     onWorkspaceAction(p.id,"MODEL",modelName,parameters){r->busy=false;r.onSuccess{message="Registro do modelo criado."}.onFailure{message=it.message?:"Erro"};refreshWorkspace(p)}
                 },enabled=modelName.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("Criar modelo")}
-                items(models){ model -> Text("• "+model.optString("name")+" · "+model.optString("architecture")+" · "+model.optString("status"),color=Color(0xFFEAF1FC),fontSize=12.sp) }
+                models.forEach { model -> Text("• "+model.optString("name")+" · "+model.optString("architecture")+" · "+model.optString("status"),color=Color(0xFFEAF1FC),fontSize=12.sp) }
             }
             item {
                 Text("ASSISTENTE KIMI · NVIDIA NIM",color=Color(0xFF78A9FF),fontWeight=FontWeight.Bold,fontSize=11.sp)
@@ -157,7 +157,7 @@ internal fun ProjectsScreen(
                     val mid=models.firstOrNull()?.optString("id").orEmpty();busy=true
                     onWorkspaceAction(p.id,"TRAIN",mid,""){r->busy=false;r.onSuccess{message="Job colocado na fila."}.onFailure{message=it.message?:"Worker indisponível"};refreshWorkspace(p)}
                 },modifier=Modifier.fillMaxWidth()){Text("Solicitar treinamento")}
-                items(jobs){ job ->
+                jobs.forEach { job ->
                     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF141F31))){Column(Modifier.padding(12.dp)){
                         Text("Job "+job.optString("id").take(8)+" · "+job.optString("status"),color=Color(0xFFEAF1FC),fontWeight=FontWeight.SemiBold)
                         Text("Métricas: "+(job.optJSONObject("metrics")?.toString() ?: "{}"),color=Color(0xFF9BAEC8),fontSize=10.sp)
