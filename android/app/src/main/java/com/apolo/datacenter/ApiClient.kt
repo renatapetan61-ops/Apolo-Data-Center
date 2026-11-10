@@ -125,7 +125,9 @@ object ApiClient {
                     404 -> "Recurso não encontrado."
                     409 -> "Operação bloqueada: confira e-mail duplicado, dataset enviado e worker AX online."
                     503 -> "Serviço indisponível: confira PostgreSQL, volume APOLO_STORAGE_DIR e o secret NVIDIA_NIM_API_KEY."
-                    502 -> "Integração NVIDIA NIM indisponível ou resposta inválida."\n                    413 -> "Solicitação excede o limite de tamanho ou de parâmetros suportado."\n                    else -> "Servidor respondeu HTTP $code."
+                    502 -> "Integração NVIDIA NIM indisponível ou resposta inválida."
+                    413 -> "Solicitação excede o limite de tamanho ou de parâmetros suportado."
+                    else -> "Servidor respondeu HTTP $code."
                 }
             }
             return response
