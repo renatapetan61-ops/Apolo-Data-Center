@@ -257,12 +257,13 @@ async fn create_training(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:H
  let datasets=sqlx::query_scalar::<_,i64>("SELECT COUNT(*) FROM project_files WHERE project_id=$1 AND kind='dataset' AND ($2::uuid IS NULL OR user_id=$2)")
  .bind(pid).bind(owner).fetch_one(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  if datasets==0{return Err(StatusCode::CONFLICT)}
- if let Some(mid)=input.model_id{
-  let params=sqlx::query_scalar::<_,Option<i64>>("SELECT parameters FROM project_models WHERE id=$1 AND project_id=$2 AND ($3::uuid IS NULL OR user_id=$3)").bind(mid).bind(pid).bind(owner).fetch_optional(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
-  if params.unwrap_or(0)>25_000_000{return Err(StatusCode::PAYLOAD_TOO_LARGE)}
- }
+ let mid=input.model_id.ok_or(StatusCode::BAD_REQUEST)?;
+ let model=sqlx::query_as::<_,(Option<i64>,String)>("SELECT parameters,architecture FROM project_models WHERE id=$1 AND project_id=$2 AND ($3::uuid IS NULL OR user_id=$3)")
+ .bind(mid).bind(pid).bind(owner).fetch_optional(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?;
+ if model.1=="imported"||model.0.is_none(){return Err(StatusCode::CONFLICT)}
+ if model.0.unwrap_or(0)>25_000_000{return Err(StatusCode::PAYLOAD_TOO_LARGE)}
  let row=sqlx::query_as::<_,JobRow>("INSERT INTO training_jobs(project_id,model_id,user_id,config) VALUES($1,$2,$3,$4) RETURNING id,project_id,model_id,status,config,metrics,checkpoint_key,worker_id,error,created_at,started_at,finished_at")
- .bind(pid).bind(input.model_id).bind(owner).bind(input.config).fetch_one(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ .bind(pid).bind(mid).bind(owner).bind(input.config).fetch_one(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  Ok((StatusCode::ACCEPTED,Json(row)))
 }
 async fn list_jobs(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderMap)->Result<Json<Vec<JobRow>>,StatusCode>{
