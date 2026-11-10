@@ -61,7 +61,7 @@ Pendencias:
 - Persistencia de metadados e entrega direta ao AX Storage.
 
 ## Fase 5 — AX Scheduler
-Status: primeira implementacao em Rust; validacao CI pendente nesta revisao.
+Status: primeira implementacao em Rust validada em CI.
 
 Implementado:
 - Registro e atualizacao de inventarios.
@@ -69,6 +69,7 @@ Implementado:
 - Reserva atomica em processo de CPU, memoria, armazenamento, rede e aceleradores.
 - Prevencao de dupla alocacao concorrente dentro de uma instancia.
 - Verificacao agregada de banda de rede.
+- Preservacao de aceleradores reservados durante atualizacao de inventario.
 - Preservacao de aceleradores reservados durante atualizacao de inventario.
 - Rejeicao de jobs duplicados ativos, liberacao e consulta de reservas.
 
@@ -78,7 +79,7 @@ Pendencias:
 - Autenticacao e atestacao dos agentes de nos.
 
 ## Fase 6 — AX Compute
-Status: executor local inicial implementado em Rust; validacao CI pendente nesta revisao.
+Status: executor local inicial implementado em Rust e validado em CI.
 
 Implementado:
 - ComputeJob e politica de execucao por allowlist de executaveis.
@@ -93,6 +94,13 @@ Pendencias:
 - Limites reais de CPU, RAM, I/O e rede aplicados pelo sistema operacional.
 - Worker daemon, execucao remota, container/VM, GPU e persistencia de jobs/logs.
 - Cancelamento externo, retries, fila de execucao e telemetria.
+
+## Validacao CI das fases 5 e 6
+Execucao GitHub Actions: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42826510376
+- Rust formatter: sucesso.
+- Clippy com `-D warnings`: sucesso.
+- Toolchains Rust/Cargo, Python 3.12, Go 1.24 e Java 21: instaladas e verificadas nos runners.
+- 35 testes unitarios aprovados: AX Compute 4, AX Core 15, AX Ingestion 6, AX Scheduler 6 e AX Storage 4.
 
 ## Limites e garantias
 - Storage atual e local, nao distribuido; quotas sao locais a uma instancia.
