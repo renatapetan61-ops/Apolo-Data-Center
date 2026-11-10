@@ -30,7 +30,10 @@ fn canonical(path: &Path) -> ComputeResult<PathBuf> {
     fs::canonicalize(path).map_err(ComputeError::Io)
 }
 
-fn read_bounded<R: Read + Send + 'static>(mut reader: R, limit: usize) -> thread::JoinHandle<(Vec<u8>, bool)> {
+fn read_bounded<R: Read + Send + 'static>(
+    mut reader: R,
+    limit: usize,
+) -> thread::JoinHandle<(Vec<u8>, bool)> {
     thread::spawn(move || {
         let mut output = Vec::with_capacity(limit.min(8192));
         let mut truncated = false;
@@ -51,7 +54,7 @@ fn read_bounded<R: Read + Send + 'static>(mut reader: R, limit: usize) -> thread
 }
 
 /// Executes approved native processes on the local node after verifying that
-/// the AX Scheduler still holds the job's resource reservation.
+/// the AX Scheduler holds the job's resource reservation.
 #[derive(Debug, Clone)]
 pub struct ProcessExecutor {
     policy: ExecutionPolicy,
@@ -60,11 +63,26 @@ pub struct ProcessExecutor {
 impl ProcessExecutor {
     pub fn new(policy: ExecutionPolicy) -> ComputeResult<Self> {
         if !policy.validate() {
-            return Err(ComputeError::InvalidPolicy("allowlist, sandbox root, timeout and output limit are required"));
+            return Err(ComputeError::InvalidPolicy(
+                "allowlist, sandbox root, timeout and output limit are required",
+            ));
         }
-        Ok(Self { policy })
+        let sandbox_root = canonical(&policy.sandbox_root)?;
+        let mut allowed_programs = Vec::new();
+        for program in &policy.allowed_programs {
+            allowed_programs.push(canonical(program)?);
+        }
+        Ok(Self {
+            policy: ExecutionPolicy {
+                allowed_programs,
+                sandbox_root,
+                ..policy
+            },
+        })
     }
 
+    /// Runs the reserved job and releases its reservation after the execution
+    /// attempt finishes. Validation failures before execution leave it intact.
     pub fn execute(
         &self,
         scheduler: &AxScheduler,
@@ -72,35 +90,55 @@ impl ProcessExecutor {
         started_at_unix: i64,
     ) -> ComputeResult<ExecutionReceipt> {
         if !job.validate() || started_at_unix <= 0 {
-            return Err(ComputeError::InvalidJob("fields, timestamp or environment are invalid"));
+            return Err(ComputeError::InvalidJob(
+                "fields, timestamp or environment are invalid",
+            ));
         }
         if job.timeout_seconds > self.policy.max_timeout_seconds {
-            return Err(ComputeError::InvalidJob("requested timeout exceeds node policy"));
+            return Err(ComputeError::InvalidJob(
+                "requested timeout exceeds node policy",
+            ));
         }
 
         let reservation = scheduler
             .get_reservation(&job.reservation_id)
             .map_err(|error| ComputeError::InvalidReservation(error.to_string()))?;
         if reservation.job_id != job.job_id {
-            return Err(ComputeError::InvalidReservation("reservation belongs to another job".into()));
+            return Err(ComputeError::InvalidReservation(
+                "reservation belongs to another job".into(),
+            ));
         }
 
+        let result = self.execute_process(job, started_at_unix, &reservation.node_id);
+        let release = scheduler.release(&job.reservation_id).map_err(|error| {
+            ComputeError::InvalidReservation(format!("execution finished but reservation release failed: {error}"))
+        });
+        match (result, release) {
+            (Ok(receipt), Ok(_)) => Ok(receipt),
+            (Err(error), Ok(_)) => Err(error),
+            (_, Err(error)) => Err(error),
+        }
+    }
+
+    fn execute_process(
+        &self,
+        job: &ComputeJob,
+        started_at_unix: i64,
+        node_id: &str,
+    ) -> ComputeResult<ExecutionReceipt> {
         let program = canonical(&job.program)?;
-        let allowed = self.policy.allowed_programs.iter()
-            .filter_map(|path| fs::canonicalize(path).ok())
-            .any(|path| path == program);
-        if !allowed {
+        if !self.policy.allowed_programs.contains(&program) {
             return Err(ComputeError::ExecutableNotAllowed);
         }
 
-        let sandbox_root = canonical(&self.policy.sandbox_root)?;
         let working_directory = canonical(&job.working_directory)?;
-        if !working_directory.starts_with(&sandbox_root) {
+        if !working_directory.starts_with(&self.policy.sandbox_root) {
             return Err(ComputeError::WorkingDirectoryOutsideSandbox);
         }
 
         let mut command = Command::new(program);
-        command.args(&job.args)
+        command
+            .args(&job.args)
             .current_dir(working_directory)
             .env_clear()
             .stdin(Stdio::null())
@@ -120,25 +158,28 @@ impl ProcessExecutor {
         let timeout = Duration::from_secs(job.timeout_seconds);
         let (status, timed_out) = loop {
             if let Some(status) = child.try_wait()? {
-                break (Some(status), false);
+                break (status, false);
             }
             if started.elapsed() >= timeout {
                 let _ = child.kill();
-                break (Some(child.wait()?), true);
+                break (child.wait()?, true);
             }
             thread::sleep(Duration::from_millis(10));
         };
 
-        let (stdout, stdout_truncated) = stdout_reader.join().map_err(|_| ComputeError::OutputReaderFailed)?;
-        let (stderr, stderr_truncated) = stderr_reader.join().map_err(|_| ComputeError::OutputReaderFailed)?;
-        let elapsed_millis = started.elapsed().as_millis();
+        let (stdout, stdout_truncated) = stdout_reader
+            .join()
+            .map_err(|_| ComputeError::OutputReaderFailed)?;
+        let (stderr, stderr_truncated) = stderr_reader
+            .join()
+            .map_err(|_| ComputeError::OutputReaderFailed)?;
         Ok(ExecutionReceipt {
             execution_id: Uuid::new_v4().to_string(),
             job_id: job.job_id.clone(),
-            node_id: reservation.node_id,
+            node_id: node_id.to_owned(),
             started_at_unix,
-            elapsed_millis,
-            exit_code: status.and_then(|value| value.code()),
+            elapsed_millis: started.elapsed().as_millis(),
+            exit_code: status.code(),
             timed_out,
             stdout,
             stderr,
