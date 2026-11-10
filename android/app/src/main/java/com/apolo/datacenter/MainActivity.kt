@@ -57,16 +57,34 @@ class MainActivity : ComponentActivity() {
         val initialEndpoint = preferences.getString("api_endpoint", "https://apolo-ax-api-production.up.railway.app")
             ?: "https://apolo-ax-api-production.up.railway.app"
         val initialToken = SecureTokenStore.read(this)
+        val initialSession = SecureTokenStore.readSession(this)
         setContent {
             ApoloTheme {
                 ApoloApplication(
                     initialEndpoint = initialEndpoint,
                     initialToken = initialToken,
+                    initialSession = initialSession,
                     onSaveEndpoint = { value -> preferences.edit().putString("api_endpoint", value).apply() },
+                    onSaveSession = { value -> SecureTokenStore.writeSession(this, value) },
                     onSaveToken = { value -> SecureTokenStore.write(this, value) },
                     onConnect = { endpoint, callback ->
                         executor.execute {
                             val result = runCatching { fetchSnapshot(endpoint) }
+                            runOnUiThread { callback(result) }
+                        }
+                    },
+                    onAuthenticate = { endpoint, name, email, password, register, callback ->
+                        executor.execute {
+                            val result = runCatching {
+                                if (register) ApiClient.register(endpoint, name, email, password)
+                                else ApiClient.login(endpoint, email, password)
+                            }
+                            runOnUiThread { callback(result) }
+                        }
+                    },
+                    onGenerateToken = { endpoint, session, label, callback ->
+                        executor.execute {
+                            val result = runCatching { ApiClient.createApiToken(endpoint, session, label) }
                             runOnUiThread { callback(result) }
                         }
                     },
@@ -151,9 +169,13 @@ private fun ApoloTheme(content: @Composable () -> Unit) {
 private fun ApoloApplication(
     initialEndpoint: String,
     initialToken: String,
+    initialSession: String,
     onSaveEndpoint: (String) -> Unit,
     onSaveToken: (String) -> Unit,
+    onSaveSession: (String) -> Unit,
     onConnect: (String, (Result<ApiSnapshot>) -> Unit) -> Unit,
+    onAuthenticate: (String, String, String, String, Boolean, (Result<AuthSession>) -> Unit) -> Unit,
+    onGenerateToken: (String, String, String, (Result<String>) -> Unit) -> Unit,
     onProjectAction: (String, String, ProjectAction, String, String, String, (Result<List<ProjectInfo>>) -> Unit) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(AppTab.HOME) }
@@ -163,6 +185,14 @@ private fun ApoloApplication(
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("API ainda não conectada") }
     var connected by remember { mutableStateOf(false) }
+    var authenticated by remember { mutableStateOf(initialSession.length >= 32) }
+    var sessionToken by remember { mutableStateOf(initialSession) }
+    var authLoading by remember { mutableStateOf(false) }
+    var authMessage by remember { mutableStateOf("") }
+    var showTokenScreen by remember { mutableStateOf(false) }
+    var generatedToken by remember { mutableStateOf("") }
+    var tokenLoading by remember { mutableStateOf(false) }
+    var tokenMessage by remember { mutableStateOf("") }
 
     fun connect() {
         loading = true
@@ -178,6 +208,32 @@ private fun ApoloApplication(
                 message = it.message ?: "Não foi possível conectar"
             }
         }
+    }
+
+    if (!authenticated) {
+        AuthScreen(
+            endpoint = endpoint,
+            loading = authLoading,
+            message = authMessage,
+            onSubmit = { name, email, password, register, callback ->
+                authLoading = true
+                authMessage = if (register) "Criando sua conta…" else "Validando seu acesso…"
+                onAuthenticate(endpoint, name, email, password, register) { result ->
+                    authLoading = false
+                    result.onSuccess { session ->
+                        sessionToken = session.accessToken
+                        onSaveSession(session.accessToken)
+                        authenticated = true
+                        authMessage = ""
+                        message = "Bem-vindo, ${session.name}."
+                    }.onFailure { error ->
+                        authMessage = error.message ?: "Não foi possível autenticar."
+                    }
+                    callback(result)
+                }
+            }
+        )
+        return
     }
 
     Scaffold(
@@ -238,10 +294,39 @@ private fun ApoloApplication(
                 listOf("AX Scheduler", "AX Compute", "AX Accelerator ISA", "Treinamento de modelos"),
                 "O scheduler e o runtime AX existem no núcleo Rust. Execução remota multiusuário e aceleradores físicos ainda não estão habilitados."
             )
-            AppTab.PROJECTS -> ProjectsScreen(
+            AppTab.PROJECTS -> if (showTokenScreen) {
+                CreateTokenScreen(
+                    loading = tokenLoading,
+                    message = tokenMessage,
+                    token = generatedToken,
+                    onBack = { showTokenScreen = false; generatedToken = ""; tokenMessage = "" },
+                    onGenerate = { label ->
+                        tokenLoading = true
+                        tokenMessage = "Gerando credencial segura no servidor…"
+                        onGenerateToken(endpoint, sessionToken, label) { result ->
+                            tokenLoading = false
+                            result.onSuccess {
+                                generatedToken = it
+                                tokenMessage = "Token criado com sucesso."
+                            }.onFailure { error ->
+                                tokenMessage = error.message ?: "Falha ao gerar token."
+                            }
+                        }
+                    },
+                    onUseInSettings = { value ->
+                        apiToken = value
+                        onSaveToken(value)
+                        showTokenScreen = false
+                        generatedToken = ""
+                        selectedTab = AppTab.SETTINGS
+                        message = "Token gerado e salvo com proteção do Android Keystore."
+                    }
+                )
+            } else ProjectsScreen(
                 modifier = Modifier.padding(padding),
                 endpoint = endpoint,
                 token = apiToken,
+                onCreateToken = { showTokenScreen = true; generatedToken = ""; tokenMessage = "" },
                 onAction = { action, name, description, projectId, callback ->
                     onProjectAction(endpoint, apiToken, action, name, description, projectId, callback)
                 }
@@ -259,7 +344,13 @@ private fun ApoloApplication(
                 },
                 onConnect = ::connect,
                 message = message,
-                loading = loading
+                loading = loading,
+                onLogout = {
+                    authenticated = false
+                    sessionToken = ""
+                    onSaveSession("")
+                    authMessage = "Você saiu da sua conta."
+                }
             )
         }
     }
