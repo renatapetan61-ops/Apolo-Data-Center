@@ -106,5 +106,6 @@ mod tests {
         assert_eq!(receipt.exit_code, Some(0));
         assert!(!receipt.timed_out);
         assert!(String::from_utf8_lossy(&receipt.stdout).contains("hello"));
+        assert!(scheduler.get_reservation(&reservation.reservation_id).is_err());
     }
 }
