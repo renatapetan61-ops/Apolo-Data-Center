@@ -2,6 +2,8 @@ package com.apolo.datacenter
 
 import android.content.Context
 import android.os.Bundle
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.graphics.Color as AndroidColor
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -99,6 +101,31 @@ class MainActivity : ComponentActivity() {
                             }
                             runOnUiThread { callback(result) }
                         }
+                    },
+                    onWorkspaceAction = { endpoint, token, projectId, action, payload, callback ->
+                        executor.execute {
+                            val result = runCatching {
+                                when (action) {
+                                    "LOAD" -> { val w=ApiClient.workspace(endpoint,token,projectId); JSONObject().put("files",w.files).put("models",w.models).put("jobs",w.jobs).toString() }
+                                    "CHAT" -> ApiClient.askKimi(endpoint,token,projectId,payload.substringBefore("\n"))
+                                    "MODEL" -> ApiClient.createModel(endpoint,token,projectId,payload.substringBefore("\n"),payload.substringAfter("\n").toLongOrNull() ?: 0L)
+                                    "TRAIN" -> ApiClient.startTraining(endpoint,token,projectId,payload)
+                                    else -> error("Ação desconhecida.")
+                                }
+                            }
+                            runOnUiThread { callback(result) }
+                        }
+                    },
+                    onUploadFile = { endpoint, token, projectId, uri, kind, callback ->
+                        executor.execute {
+                            val result = runCatching {
+                                val bytes=contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Não foi possível ler o arquivo.")
+                                val name=contentResolver.query(uri,null,null,null,null)?.use { c -> if(c.moveToFirst()) c.getString(c.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else "upload.bin" } ?: "upload.bin"
+                                val type=contentResolver.getType(uri) ?: "application/octet-stream"
+                                ApiClient.uploadFile(endpoint,token,projectId,name,type,kind,bytes)
+                            }
+                            runOnUiThread { callback(result) }
+                        }
                     }
                 )
             }
@@ -176,7 +203,9 @@ private fun ApoloApplication(
     onConnect: (String, (Result<ApiSnapshot>) -> Unit) -> Unit,
     onAuthenticate: (String, String, String, String, Boolean, (Result<AuthSession>) -> Unit) -> Unit,
     onGenerateToken: (String, String, String, (Result<String>) -> Unit) -> Unit,
-    onProjectAction: (String, String, ProjectAction, String, String, String, (Result<List<ProjectInfo>>) -> Unit) -> Unit
+    onProjectAction: (String, String, ProjectAction, String, String, String, (Result<List<ProjectInfo>>) -> Unit) -> Unit,
+    onWorkspaceAction: (String, String, String, String, String, (Result<String>) -> Unit) -> Unit,
+    onUploadFile: (String, String, String, Uri, String, (Result<String>) -> Unit) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(AppTab.HOME) }
     var endpoint by remember { mutableStateOf(initialEndpoint) }
@@ -333,7 +362,11 @@ private fun ApoloApplication(
                 onCreateToken = { showTokenScreen = true; generatedToken = ""; tokenMessage = "" },
                 onAction = { action, name, description, projectId, callback ->
                     onProjectAction(endpoint, apiToken, action, name, description, projectId, callback)
-                }
+                },
+                onWorkspaceAction = { projectId, action, value, extra, callback ->
+                    onWorkspaceAction(endpoint, apiToken, projectId, action, value + "\n" + extra, callback)
+                },
+                onUpload = { projectId, uri, kind, callback -> onUploadFile(endpoint, apiToken, projectId, uri, kind, callback) }
             )
             AppTab.SETTINGS -> SettingsScreen(
                 modifier = Modifier.padding(padding),
