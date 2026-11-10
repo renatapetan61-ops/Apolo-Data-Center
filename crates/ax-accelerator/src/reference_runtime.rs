@@ -74,19 +74,19 @@ pub fn execute_reference(
             }
             AxOpcode::Add | AxOpcode::DotProduct => {
                 let target = dst.ok_or(AxRuntimeError::InvalidInstructionShape)?;
-                registers[target] = read(0)?.wrapping_add(read_register(&registers, src, 1)?);
+                registers[target] = read_register(&registers, src, 0)?.wrapping_add(read_register(&registers, src, 1)?);
             }
             AxOpcode::Multiply => {
                 let target = dst.ok_or(AxRuntimeError::InvalidInstructionShape)?;
-                registers[target] = read(0)?.wrapping_mul(read(1)?);
+                registers[target] = read_register(&registers, src, 0)?.wrapping_mul(read_register(&registers, src, 1)?);
             }
             AxOpcode::FusedMultiplyAdd => {
                 let target = dst.ok_or(AxRuntimeError::InvalidInstructionShape)?;
-                registers[target] = read(0)?.wrapping_mul(read(1)?).wrapping_add(read_register(&registers, src, 2)?);
+                registers[target] = read_register(&registers, src, 0)?.wrapping_mul(read_register(&registers, src, 1)?).wrapping_add(read_register(&registers, src, 2)?);
             }
             AxOpcode::Relu => {
                 let target = dst.ok_or(AxRuntimeError::InvalidInstructionShape)?;
-                registers[target] = (read(0)? as i64).max(0) as u64;
+                registers[target] = (read_register(&registers, src, 0)? as i64).max(0) as u64;
             }
             AxOpcode::MatrixMultiplyTile => {
                 return Err(AxRuntimeError::UnsupportedOperation(AxOpcode::MatrixMultiplyTile));
