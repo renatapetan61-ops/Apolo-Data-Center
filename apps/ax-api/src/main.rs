@@ -89,8 +89,10 @@ async fn list_projects(
 
 async fn create_project(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(input): Json<CreateProject>,
 ) -> Result<(StatusCode, Json<Project>), StatusCode> {
+    authorize(&headers, state.api_token.as_deref())?;
     let database = state.database.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let name = input.name.trim();
     if name.is_empty() || name.len() > 120 || input.description.len() > 4000 {
@@ -110,7 +112,9 @@ async fn create_project(
 async fn delete_project(
     State(state): State<AppState>,
     Path(project_id): Path<uuid::Uuid>,
+    headers: HeaderMap,
 ) -> Result<StatusCode, StatusCode> {
+    authorize(&headers, state.api_token.as_deref())?;
     let database = state.database.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
     let result = sqlx::query("DELETE FROM projects WHERE id = $1")
         .bind(project_id)
