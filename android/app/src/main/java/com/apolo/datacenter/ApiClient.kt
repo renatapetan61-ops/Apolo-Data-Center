@@ -7,6 +7,7 @@ import java.net.URL
 
 data class ProjectInfo(val id: String, val name: String, val description: String, val createdAt: String)
 data class AuthSession(val accessToken: String, val name: String, val email: String, val apiToken: String = "")
+data class WorkspaceSnapshot(val files: JSONArray, val models: JSONArray, val jobs: JSONArray)
 
 object ApiClient {
     fun register(endpoint: String, name: String, email: String, password: String): AuthSession {
@@ -46,6 +47,48 @@ object ApiClient {
         request(endpoint, "/api/v1/projects/$projectId", "DELETE", token, null)
         return fetchProjects(endpoint, token)
     }
+
+    fun workspace(endpoint: String, token: String, projectId: String): WorkspaceSnapshot {
+        val root = "/api/v1/projects/$projectId"
+        return WorkspaceSnapshot(JSONArray(request(endpoint, "$root/files", "GET", token, null)),
+            JSONArray(request(endpoint, "$root/models", "GET", token, null)),
+            JSONArray(request(endpoint, "$root/training", "GET", token, null)))
+    }
+    fun askKimi(endpoint: String, token: String, projectId: String, message: String): String {
+        val body = JSONObject().put("message", message).toString()
+        return JSONObject(request(endpoint, "/api/v1/projects/$projectId/assistant/chat", "POST", token, body)).optString("content", "Sem conteúdo.")
+    }
+    fun createModel(endpoint: String, token: String, projectId: String, name: String, parameters: Long): String {
+        val body = JSONObject().put("name", name).put("architecture", "transformer").put("parameters", parameters)
+            .put("config", JSONObject().put("framework", "pytorch")).toString()
+        return request(endpoint, "/api/v1/projects/$projectId/models", "POST", token, body)
+    }
+    fun startTraining(endpoint: String, token: String, projectId: String, modelId: String): String {
+        val body = JSONObject().put("model_id", modelId.ifBlank { JSONObject.NULL }).put("config", JSONObject().put("framework", "pytorch")).toString()
+        return request(endpoint, "/api/v1/projects/$projectId/training", "POST", token, body)
+    }
+    fun uploadFile(endpoint: String, token: String, projectId: String, filename: String, contentType: String, kind: String, bytes: ByteArray): String {
+        val encoded = java.net.URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
+        return rawRequest(endpoint, "/api/v1/projects/$projectId/files/$encoded", token, contentType, kind, bytes)
+    }
+    private fun rawRequest(endpoint: String, path: String, token: String, contentType: String, kind: String, bytes: ByteArray): String {
+        val base = endpoint.trim().trimEnd('/')
+        require(base.startsWith("https://") || base.startsWith("http://10.0.2.2") || base.startsWith("http://127.0.0.1") || base.startsWith("http://localhost")) { "Conexões remotas exigem HTTPS." }
+        val c = (URL(base + path).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 20000; readTimeout = 60000; doOutput = true
+            setRequestProperty("Authorization", "Bearer $token"); setRequestProperty("Content-Type", contentType)
+            setRequestProperty("X-Apolo-File-Kind", kind); setRequestProperty("Accept", "application/json")
+        }
+        try {
+            c.outputStream.use { it.write(bytes) }
+            val code = c.responseCode
+            val stream = if (code in 200..299) c.inputStream else c.errorStream
+            val result = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            check(code in 200..299) { when(code) { 401 -> "Token inválido."; 404 -> "Projeto ou arquivo não encontrado."; 409 -> "Nenhum worker AX compatível está ativo."; 413 -> "Arquivo maior que 100 MB."; 503 -> "Armazenamento persistente ou NVIDIA NIM não configurado."; else -> "Servidor respondeu HTTP $code: $result" } }
+            return result
+        } finally { c.disconnect() }
+    }
+
     private fun request(endpoint: String, path: String, method: String, token: String?, body: String?): String {
         require(token.isNullOrBlank() || token.length >= 32) { "Token de autenticação inválido." }
         val base = endpoint.trim().trimEnd('/')
