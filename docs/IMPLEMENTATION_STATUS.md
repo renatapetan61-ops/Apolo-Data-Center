@@ -2,6 +2,10 @@
 
 Data de referencia: 2026-11-10
 
+## Diretriz de desenvolvimento
+
+O APOLO DATA CENTER é um produto de software desenvolvido no repositório, com serviços e control planes próprios. Dependências externas serão usadas como bibliotecas, protocolos, runtimes ou infraestrutura quando necessário; isso não significa que os serviços do APOLO já existam. Ferramentas de compilação e teste são provisionadas nos ambientes de CI. A disponibilidade de hardware físico e servidores de produção é uma etapa separada.
+
 ## Fase 1 — Fundacao e arquitetura
 Status: estrutura versionada.
 
@@ -56,20 +60,39 @@ Pendencias:
 - Validacao estrita do MIME type e limites por bytes agregados/tenant.
 - Persistencia de metadados e entrega direta ao AX Storage.
 
-## Limites e garantias
-- Storage atual e local, nao distribuido; quotas sao locais a uma instancia.
-- Ingestion atual mantem payloads e dedupe em memoria; restart perde fila e historico.
-- Queue capacity e compartilhada por instancia; rate limit e por projeto.
-- Audio/video passam apenas por verificacao basica de payload nao vazio; nao ha decodificacao de codec.
-- Nenhum hardware fisico, GPU, throughput ou capacidade de cluster e provisionado por estes modulos.
+## Fase 5 — AX Scheduler
+Status: primeira implementação em Rust criada; aguardando CI.
 
-## Validacao automatizada
-GitHub Actions executado com sucesso:
+Implementado no primeiro corte:
+- Registro e atualização de inventários.
+- Colocação best-fit determinística.
+- Reserva atômica em processo de CPU, memória, armazenamento, rede e aceleradores.
+- Prevenção de dupla alocação concorrente dentro de uma instância.
+- Rejeição de jobs duplicados ativos.
+- Liberação e consulta de reservas.
+- Bloqueio de atualização de inventário incompatível com reservas existentes.
+
+Pendências:
+- Persistência PostgreSQL, leases, heartbeat, fencing tokens e recuperação após restart.
+- Coordenação multi-instância, prioridades, fairness, quotas por tenant e preempção.
+- Execução real de workloads e integração com containers/Kubernetes.
+- Autenticação e atestação dos agentes de nós.
+
+## Limites e garantias
+- Storage atual e local, não distribuído; quotas são locais a uma instância.
+- Ingestion atual mantém payloads e dedupe em memória; restart perde fila e histórico.
+- Scheduler atual mantém nós e reservas em memória; restart perde estado e não coordena processos distintos.
+- Queue capacity é compartilhada por instância; rate limit é por projeto.
+- Áudio/vídeo passam apenas por verificação básica de payload não vazio; não há decodificação de codec.
+- Nenhum hardware físico, GPU, throughput ou capacidade de cluster é provisionado por estes módulos.
+
+## Validação automatizada anterior
+GitHub Actions executado com sucesso para AX Core, Storage e Ingestion:
 - Rust formatter executado.
 - Clippy aprovado com `-D warnings`.
-- 25 testes unitarios aprovados: 15 AX Core, 4 AX Storage e 6 AX Ingestion.
+- 25 testes unitários aprovados: 15 AX Core, 4 AX Storage e 6 AX Ingestion.
 
-Execucao: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42822969708
+Execução: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42822969708
 
-## Proxima etapa
-Fase 5 — AX Scheduler: planejamento de colocacao, requisitos de jobs, selecao de nos verificados e reservas atomicas com persistencia transacional. O metodo `NodeInventory::can_satisfy` atual e somente pre-validacao; nao reserva recursos nem evita dupla alocacao.
+## Próxima etapa
+Fase 6 — AX Compute: protocolo de execução de workloads, ciclo de vida, isolamento, limites e adaptador de runtime. O Scheduler atual apenas reserva recursos; ainda não executa jobs.
