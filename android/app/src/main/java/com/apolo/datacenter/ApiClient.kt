@@ -58,6 +58,12 @@ object ApiClient {
         val body = JSONObject().put("message", message).toString()
         return JSONObject(request(endpoint, "/api/v1/projects/$projectId/assistant/chat", "POST", token, body)).optString("content", "Sem conteúdo.")
     }
+
+    fun generateModel(endpoint: String, token: String, projectId: String, name: String, parameters: Long, description: String): String {
+        val body = JSONObject().put("name", name).put("parameters", parameters).put("description", description).toString()
+        return request(endpoint, "/api/v1/projects/$projectId/models/generate", "POST", token, body)
+    }
+
     fun createModel(endpoint: String, token: String, projectId: String, name: String, parameters: Long): String {
         val body = JSONObject().put("name", name).put("architecture", "transformer").put("parameters", parameters)
             .put("config", JSONObject().put("framework", "pytorch")).toString()
