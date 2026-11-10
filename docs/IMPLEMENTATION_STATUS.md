@@ -119,5 +119,27 @@ GitHub Actions executado com sucesso para AX Core, Storage e Ingestion:
 
 Execucao: https://github.com/renatapetan61-ops/Apolo-Data-Center/actions/runs/42822969708
 
+## Fase 7 — AX Node Agent (primeiro incremento)
+Status: máquina de estados local implementada; transporte e atestação pendentes.
+
+Implementado:
+- Novo crate `apolo-ax-node-agent` integrado ao workspace.
+- Registro de agente com verificação de credencial delegada ao contrato `CredentialVerifier`.
+- Validação do inventário e vínculo da identidade do agente com o node_id.
+- Heartbeat com sequência crescente e timestamp monotônico para rejeitar replay e mensagens atrasadas.
+- Expiração de lease e transição do nó para Offline.
+- O agente nunca pode declarar seu próprio hardware como verificado: o registro força `hardware_verified=false`; somente atestação independente futura poderá habilitar o nó para o Scheduler.
+- Seis testes unitários adicionados.
+
+Pendências críticas:
+- Servidor de transporte HTTPS/mTLS e vínculo de identidade a certificados.
+- Implementação de produção do verificador e armazenamento seguro/rotação de credenciais.
+- Persistência de agentes, sequência e leases.
+- Probe de hardware real e atestação independente.
+- Daemon de sistema com usuário sem privilégios, cgroups v2, namespaces e seccomp.
+- Canal remoto de comandos; nenhum job remoto é executado nesta fase.
+
+Documentação: `docs/agents/ax-node-agent.md`.
+
 ## Proxima etapa
-Fase 7 — AX Training Engine: preparar ciclo de treinamento, dataset manifests, experimentos, checkpoints e adaptadores de execução. Antes, evoluir AX Compute para agente de nó com isolamento de sistema operacional.
+Fase 8 — transporte seguro e persistente do plano de controle: HTTPS/mTLS, identidade criptográfica dos agentes, persistência transacional e integração do registro com Scheduler. Em paralelo, evoluir AX Compute com isolamento real do sistema operacional antes de habilitar execução remota.
