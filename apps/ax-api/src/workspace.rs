@@ -283,7 +283,34 @@ async fn register_worker(State(s):State<AppState>,headers:HeaderMap,Json(input):
  .fetch_one(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  Ok((StatusCode::CREATED,Json(serde_json::json!({"id":id,"status":"online","message":"Inventário declarado pelo agente; valide hardware no próprio worker."}))))
 }
-async fn list_workers(State(s):State<AppState>,headers:HeaderMap)->Result<Json<Vec<WorkerRow>>,StatusCode>{
+#[derive(Deserialize)]
+struct VtaPlanQuery { parameters: String }
+async fn vta_plan(State(s):State<AppState>,headers:HeaderMap,Query(q):Query<VtaPlanQuery>)->Result<Json<serde_json::Value>,StatusCode>{
+ let owner=authorize(&s,&headers).await?;
+ let workers=sqlx::query_as::<_,WorkerRow>("SELECT id,name,cpu_cores,ram_bytes,ram_available_bytes,gpu_name,gpu_memory_bytes,gpu_free_memory_bytes,cpu_utilization_pct,gpu_utilization_pct,accelerator_kind,compute_capability,network_bandwidth_mbps,framework,status,last_seen_at FROM ax_workers WHERE status='online' AND last_seen_at>NOW()-INTERVAL '90 seconds' AND ($1::uuid IS NULL OR user_id=$1)")
+ .bind(owner).fetch_all(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ let gpu:Vec<&WorkerRow>=workers.iter().filter(|w|w.gpu_free_memory_bytes.unwrap_or(0)>0).collect();
+ let gpu_free:i128=gpu.iter().map(|w|w.gpu_free_memory_bytes.unwrap_or(0) as i128).sum();
+ let ram_free:i128=workers.iter().filter(|w|w.gpu_free_memory_bytes.unwrap_or(0)==0).map(|w|w.ram_available_bytes.unwrap_or(0) as i128).sum();
+ let limit=if !gpu.is_empty(){(gpu_free as f64*0.65/16.0) as i128}else{(ram_free as f64*0.35/16.0) as i128};
+ let requested=q.parameters.trim().to_lowercase();
+ let impossible=requested.contains("googolplex")||requested.contains("centilh")||requested.contains("centillion");
+ let parsed=requested.replace('_',"").replace(",","").parse::<i128>().ok();
+ let feasible=if impossible{Some(false)}else{parsed.map(|n|n>0&&n<=limit&&limit>0)};
+ let reason=if impossible{"A escala solicitada ultrapassa qualquer capacidade física concebível."}
+ else if parsed.is_none(){"Informe um número inteiro de parâmetros ou o termo googolplex/centilhão."}
+ else if feasible==Some(true){"Estimativa de memória compatível com o inventário online; execução ainda exige runtime, dataset e validação."}
+ else {"Memória estimada insuficiente nos workers online."};
+ Ok(Json(serde_json::json!({
+  "product":"APOLO VTA","mode":"virtual_resource_orchestrator","hardware_emulation":false,"planning_only":true,
+  "execution_ready":false,"requested_parameters":q.parameters,"feasible_by_memory_estimate":feasible,
+  "estimated_parameter_limit":limit.to_string(),"active_workers":workers.len(),"gpu_workers":gpu.len(),
+  "aggregate_gpu_free_bytes":gpu_free.to_string(),"aggregate_cpu_ram_available_bytes":ram_free.to_string(),
+  "reason":reason,"distributed_runtime":"NOT_INSTALLED",
+  "warning":"Planejamento não equivale a benchmark nem cria FLOPS/VRAM. O worker AX atual ainda é single-rank."
+ })))
+}
+\nasync fn list_workers(State(s):State<AppState>,headers:HeaderMap)->Result<Json<Vec<WorkerRow>>,StatusCode>{
  let owner=authorize(&s,&headers).await?;
  let rows=sqlx::query_as::<_,WorkerRow>("SELECT id,name,cpu_cores,ram_bytes,ram_available_bytes,gpu_name,gpu_memory_bytes,gpu_free_memory_bytes,cpu_utilization_pct,gpu_utilization_pct,accelerator_kind,compute_capability,network_bandwidth_mbps,framework,status,last_seen_at FROM ax_workers WHERE ($1::uuid IS NULL OR user_id=$1) ORDER BY last_seen_at DESC NULLS LAST")
  .bind(owner).fetch_all(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -335,6 +362,7 @@ pub(crate) fn router()->Router<AppState>{
  .route("/api/v1/projects/{pid}/models/generate",post(generate_model))
  .route("/api/v1/projects/{pid}/training",get(list_jobs).post(create_training))
  .route("/api/v1/workers",get(list_workers).post(register_worker))
+ .route("/api/v1/vta/plan",get(vta_plan))
  .route("/api/v1/workers/{id}/heartbeat",post(heartbeat))
  .route("/api/v1/workers/{id}/claim",post(claim_worker_job))
  .route("/api/v1/training/{id}/metrics",post(update_metrics))
