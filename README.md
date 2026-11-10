@@ -9,3 +9,20 @@ Principios: separar control plane/data plane; distinguir quota logica, capacidad
 Stack planejada: Rust (AX), Python (workers PyTorch/JAX), Kotlin (Android), PostgreSQL, Redis e object storage S3-compatible.
 
 Consulte docs/architecture/overview.md e docs/adr/0001-architecture-boundaries.md.
+
+## Aplicativo web inicial (MVP de control plane)
+
+O primeiro aplicativo utilizável está em `apps/ax-api`:
+- API HTTP Rust com `/healthz`, `/api/v1/overview` e `/api/v1/nodes`.
+- Painel web em português servido na rota `/`.
+- O painel mostra apenas inventários realmente registrados no scheduler em memória; não cria nós fictícios nem anuncia capacidade física inexistente.
+- O serviço ainda é single-process e volátil. Não há login, multi-tenancy, persistência PostgreSQL, cadastro remoto de agentes, TLS de produção nem execução de jobs via HTTP nesta versão.
+
+## Execução local com Docker Compose
+
+1. Copie `infrastructure/.env.example` para `infrastructure/.env` e substitua todas as senhas de exemplo por segredos aleatórios fortes.
+2. Na raiz do repositório, execute `docker compose --env-file infrastructure/.env -f infrastructure/compose.yaml up --build -d`.
+3. Abra `http://127.0.0.1:8080`; verifique `http://127.0.0.1:8080/healthz`.
+4. Os serviços auxiliares estão publicados somente em loopback. A API ainda não consome PostgreSQL, Redis ou MinIO; esses serviços estão preparados para as próximas integrações.
+
+Não publique esta versão diretamente na internet. Antes disso são necessários autenticação, autorização, TLS, persistência, rate limiting, auditoria, hardening e revisão de segurança.
