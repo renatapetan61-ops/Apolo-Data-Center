@@ -71,3 +71,15 @@ O agente reporta hardware, envia heartbeat, reivindica jobs, executa o train.py 
 ### Limites da execução atual
 
 O scaffold gerado é um modelo Transformer pequeno de partida, não um LLM pré-treinado nem uma cópia do Kimi. O endpoint de treino exige dataset e worker online com pelo menos 2 CPUs e 4 GiB RAM e bloqueia registros acima de 25 milhões de parâmetros nesse executor inicial. Treinos maiores, distribuídos multi-GPU, MoE em escala e modelos de centenas de bilhões/trilhões exigem workers especializados, armazenamento e comunicação distribuída adicionais; não são simulados.
+
+## APOLO VTA — Virtual Tensor Accelerator
+
+APOLO VTA é um orquestrador virtual de recursos de IA, não uma TPU emulada nem um acelerador de hardware. Ele agrega telemetria dos workers AX, estima memória para BF16 + AdamW e rejeita escalas fisicamente impossíveis.
+
+- Inventário de workers com CPU/RAM/VRAM livre: `GET /api/v1/workers`.
+- Avaliação de capacidade: `GET /api/v1/vta/plan?parameters=70000000000`.
+- CLI de planejamento: `python workers/virtual-accelerator/apolo_vta.py --parameters 70000000000`.
+- Worker envia telemetria de RAM livre e VRAM CUDA livre nos heartbeats.
+- Testes: workflow `APOLO VTA CI`.
+
+**Limite atual:** o planejador é planning-only. O executor de treinamento AX continua single-rank; treinamento FSDP2/tensor/pipeline paralelo multi-node ainda precisa ser implementado e validado com rede e aceleradores reais. O VTA não cria capacidade física nem promete ser mais rápido que uma TPU. Consulte `workers/virtual-accelerator/README.md`.
