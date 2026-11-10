@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>APOLO Data Center</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#0b1220;color:#e8eef8}
+*{box-sizing:border-box}body{margin:0}.shell{max-width:1100px;margin:auto;padding:28px 18px}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #263349;padding-bottom:22px}
+h1{font-size:clamp(24px,5vw,36px);margin:0}p{color:#9fb0c8;line-height:1.5}
+.logo{font-weight:800;letter-spacing:.14em;color:#8ab4ff;font-size:12px}
+.status{border:1px solid #315c49;color:#8ee0b2;border-radius:999px;padding:7px 12px;font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:26px 0}
+.card{background:#121e30;border:1px solid #26364d;border-radius:16px;padding:18px}
+.k{color:#91a4be;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.v{font-size:24px;font-weight:700;margin-top:8px;overflow-wrap:anywhere}
+.small{font-size:13px;color:#9fb0c8}
+section{margin-top:28px}h2{font-size:18px}
+button{background:#254b82;border:0;color:white;padding:10px 14px;border-radius:10px;font-weight:600}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1423;padding:14px;border-radius:12px;color:#b8d3ff}
+footer{border-top:1px solid #263349;margin-top:34px;padding-top:16px;color:#8193ac;font-size:12px}
+</style></head>
+<body><main class="shell">
+<header><div><div class="logo">APOLO / INFRASTRUCTURE</div><h1>Data Center</h1><p>Painel de controle — visão inicial da infraestrutura APOLO AX.</p></div><span class="status" id="health">Verificando API…</span></header>
+<div class="grid">
+<div class="card"><div class="k">Nós registrados</div><div class="v" id="nodes">—</div><div class="small">Inventário observado pelo control plane</div></div>
+<div class="card"><div class="k">Control plane</div><div class="v" id="plane">—</div><div class="small">Modo atual de execução</div></div>
+<div class="card"><div class="k">Persistência</div><div class="v" id="persistence">—</div><div class="small">Estado de reservas e inventário</div></div>
+<div class="card"><div class="k">Serviço</div><div class="v" id="service">—</div><div class="small">Estado informado pela API</div></div>
+</div>
+<section><h2>Inventário de nós</h2><button id="refresh">Atualizar dados</button><p id="empty">Carregando inventário…</p><pre id="inventory" hidden></pre></section>
+<footer>APOLO Data Center · AX software foundation. Capacidade física só será exibida após inventário real e verificação independente.</footer>
+</main>
+<script>
+async function refresh(){
+ const health=document.querySelector('#health'), empty=document.querySelector('#empty'), inventory=document.querySelector('#inventory');
+ try{
+  const [h,o,n]=await Promise.all([fetch('/healthz'),fetch('/api/v1/overview'),fetch('/api/v1/nodes')]);
+  if(!h.ok||!o.ok||!n.ok)throw new Error('API indisponível');
+  const overview=await o.json(), nodes=await n.json(); await h.json();
+  health.textContent='API online';
+  document.querySelector('#nodes').textContent=overview.node_count;
+  document.querySelector('#plane').textContent=overview.control_plane;
+  document.querySelector('#persistence').textContent=overview.persistence;
+  document.querySelector('#service').textContent=overview.status;
+  if(nodes.length){empty.hidden=true;inventory.hidden=false;inventory.textContent=JSON.stringify(nodes,null,2);}
+  else{inventory.hidden=true;empty.hidden=false;empty.textContent='Nenhum nó registrado. Nenhuma capacidade física está sendo anunciada.';}
+ }catch(e){health.textContent='API indisponível';empty.hidden=false;empty.textContent='Não foi possível carregar os dados. Verifique se o serviço está ativo.';inventory.hidden=true;}
+}
+document.querySelector('#refresh').addEventListener('click',refresh);refresh();
+</script></body></html>
