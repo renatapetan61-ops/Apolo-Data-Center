@@ -295,6 +295,7 @@ private fun ApoloApplication(
             )
             AppTab.PROJECTS -> if (showTokenScreen) {
                 CreateTokenScreen(
+                    modifier = Modifier.padding(padding),
                     loading = tokenLoading,
                     message = tokenMessage,
                     token = generatedToken,
