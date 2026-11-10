@@ -19,7 +19,8 @@ internal fun ProjectsScreen(
     modifier: Modifier = Modifier,
     endpoint: String,
     token: String,
-    onAction: (ProjectAction, String, String, String, (Result<List<ProjectInfo>>) -> Unit) -> Unit
+    onAction: (ProjectAction, String, String, String, (Result<List<ProjectInfo>>) -> Unit) -> Unit,
+    onCreateToken: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -56,7 +57,10 @@ internal fun ProjectsScreen(
     ) {
         item {
             Text("APOLO AX / WORKSPACES", color = Color(0xFF78A9FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text("Projetos", color = Color(0xFFEAF1FC), fontSize = 27.sp, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("Projetos", color = Color(0xFFEAF1FC), fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                Button(onClick = onCreateToken) { Text("Criar Token") }
+            }
             Text("Projetos persistidos no PostgreSQL do servidor.", color = Color(0xFF9BAEC8), fontSize = 13.sp)
         }
         item {
