@@ -38,6 +38,10 @@ struct JobRow { id: Uuid, project_id: Uuid, model_id: Option<Uuid>, status: Stri
 #[derive(Deserialize)]
 struct WorkerInput { name: String, endpoint: Option<String>, cpu_cores: i32, ram_bytes: i64, gpu_name: Option<String>, gpu_memory_bytes: i64, #[serde(default="default_framework")] framework: String }
 fn default_framework()->String{"pytorch".into()}
+#[derive(Serialize, FromRow)]
+struct WorkerRow { id: Uuid, name: String, cpu_cores: i32, ram_bytes: i64, ram_available_bytes: Option<i64>, gpu_name: Option<String>, gpu_memory_bytes: i64, gpu_free_memory_bytes: Option<i64>, cpu_utilization_pct: Option<f64>, gpu_utilization_pct: Option<f64>, accelerator_kind: Option<String>, compute_capability: Option<String>, network_bandwidth_mbps: Option<f64>, framework: String, status: String, last_seen_at: Option<time::OffsetDateTime> }
+#[derive(Deserialize, Default)]
+struct HeartbeatInput { ram_available_bytes: Option<i64>, gpu_free_memory_bytes: Option<i64>, cpu_utilization_pct: Option<f64>, gpu_utilization_pct: Option<f64>, accelerator_kind: Option<String>, compute_capability: Option<String>, network_bandwidth_mbps: Option<f64> }
 #[derive(Deserialize)]
 struct MetricsInput { metrics: serde_json::Value, checkpoint_key: Option<String> }
 
@@ -279,9 +283,18 @@ async fn register_worker(State(s):State<AppState>,headers:HeaderMap,Json(input):
  .fetch_one(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  Ok((StatusCode::CREATED,Json(serde_json::json!({"id":id,"status":"online","message":"Inventário declarado pelo agente; valide hardware no próprio worker."}))))
 }
-async fn heartbeat(State(s):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap)->Result<StatusCode,StatusCode>{
+async fn list_workers(State(s):State<AppState>,headers:HeaderMap)->Result<Json<Vec<WorkerRow>>,StatusCode>{
  let owner=authorize(&s,&headers).await?;
- let result=sqlx::query("UPDATE ax_workers SET status='online',last_seen_at=NOW() WHERE id=$1 AND ($2::uuid IS NULL OR user_id=$2)").bind(id).bind(owner).execute(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ let rows=sqlx::query_as::<_,WorkerRow>("SELECT id,name,cpu_cores,ram_bytes,ram_available_bytes,gpu_name,gpu_memory_bytes,gpu_free_memory_bytes,cpu_utilization_pct,gpu_utilization_pct,accelerator_kind,compute_capability,network_bandwidth_mbps,framework,status,last_seen_at FROM ax_workers WHERE ($1::uuid IS NULL OR user_id=$1) ORDER BY last_seen_at DESC NULLS LAST")
+ .bind(owner).fetch_all(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ Ok(Json(rows))
+}
+async fn heartbeat(State(s):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap,body:Option<Json<HeartbeatInput>>)->Result<StatusCode,StatusCode>{
+ let owner=authorize(&s,&headers).await?;
+ let h=body.map(|v|v.0).unwrap_or_default();
+ for v in [h.cpu_utilization_pct,h.gpu_utilization_pct,h.network_bandwidth_mbps].into_iter().flatten(){if !v.is_finite()||v<0.0{return Err(StatusCode::BAD_REQUEST)}}
+ let result=sqlx::query("UPDATE ax_workers SET status='online',last_seen_at=NOW(),ram_available_bytes=COALESCE($3,ram_available_bytes),gpu_free_memory_bytes=COALESCE($4,gpu_free_memory_bytes),cpu_utilization_pct=COALESCE($5,cpu_utilization_pct),gpu_utilization_pct=COALESCE($6,gpu_utilization_pct),accelerator_kind=COALESCE($7,accelerator_kind),compute_capability=COALESCE($8,compute_capability),network_bandwidth_mbps=COALESCE($9,network_bandwidth_mbps) WHERE id=$1 AND ($2::uuid IS NULL OR user_id=$2)")
+ .bind(id).bind(owner).bind(h.ram_available_bytes).bind(h.gpu_free_memory_bytes).bind(h.cpu_utilization_pct).bind(h.gpu_utilization_pct).bind(h.accelerator_kind).bind(h.compute_capability).bind(h.network_bandwidth_mbps).execute(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
  if result.rows_affected()==0{return Err(StatusCode::NOT_FOUND)} Ok(StatusCode::NO_CONTENT)
 }
 async fn update_metrics(State(s):State<AppState>,Path(id):Path<Uuid>,headers:HeaderMap,Json(input):Json<MetricsInput>)->Result<StatusCode,StatusCode>{
@@ -321,7 +334,7 @@ pub(crate) fn router()->Router<AppState>{
  .route("/api/v1/projects/{pid}/assistant/chat",post(kimi_chat))
  .route("/api/v1/projects/{pid}/models/generate",post(generate_model))
  .route("/api/v1/projects/{pid}/training",get(list_jobs).post(create_training))
- .route("/api/v1/workers",post(register_worker))
+ .route("/api/v1/workers",get(list_workers).post(register_worker))
  .route("/api/v1/workers/{id}/heartbeat",post(heartbeat))
  .route("/api/v1/workers/{id}/claim",post(claim_worker_job))
  .route("/api/v1/training/{id}/metrics",post(update_metrics))
