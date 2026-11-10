@@ -224,3 +224,22 @@ Limites:
 - O workflow GHCR publica uma imagem versionada, mas não configura servidor, DNS nem produção automaticamente.
 
 Documentação: `docs/deployment/application-and-deployment.md`.
+
+
+## Aplicativo Android nativo APOLO Data Center
+
+Status: primeiro MVP Kotlin adicionado; compilação Android via CI pendente.
+
+Implementado:
+- Projeto Android Gradle em `android/`, Kotlin, namespace `com.apolo.datacenter`, minSdk 26, target/compileSdk 36.
+- Activity nativa sem WebView, tela de estado, endpoint configurável, botão de conexão e leitura de health/overview/inventário.
+- HTTPS obrigatório para hosts remotos; HTTP permitido apenas para loopback e endereço do emulador via Network Security Config.
+- Workflow `.github/workflows/android-ci.yml` para construir Debug e Release e guardar APKs como artifacts.
+
+Ainda não implementado:
+- JNI/UniFFI para integrar crates Rust dentro do processo Android.
+- Autenticação, armazenamento seguro de tokens, enrollment de agentes, push de telemetria e notificações.
+- Assinatura de Release por keystore e publicação na Play Store.
+- Backend distribuído persistente e endpoint HTTPS real. O domínio de exemplo na tela deve ser substituído após a implantação do servidor.
+
+O painel web é complementar. O aplicativo Android nativo é o cliente principal.
