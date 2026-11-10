@@ -1,0 +1,13 @@
+[package]
+name = "apolo-ax-compute"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+apolo-ax-core = { path = "../ax-core" }
+apolo-ax-scheduler = { path = "../ax-scheduler" }
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
