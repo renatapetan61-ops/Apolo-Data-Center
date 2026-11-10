@@ -73,3 +73,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{body::{to_bytes, Body}, http::Request};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn health_endpoint_reports_service() {
+        let response = app(AppState { scheduler: Arc::new(AxScheduler::new()) })
+            .oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 4096).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["service"], "apolo-ax-api");
+        assert_eq!(json["status"], "ok");
+    }
+
+    #[tokio::test]
+    async fn overview_does_not_invent_physical_nodes() {
+        let response = app(AppState { scheduler: Arc::new(AxScheduler::new()) })
+            .oneshot(Request::builder().uri("/api/v1/overview").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 4096).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["node_count"], 0);
+        assert_eq!(json["persistence"], "volatile_memory");
+    }
+}
