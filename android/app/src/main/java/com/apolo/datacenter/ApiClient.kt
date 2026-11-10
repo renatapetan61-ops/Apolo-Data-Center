@@ -6,21 +6,25 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class ProjectInfo(val id: String, val name: String, val description: String, val createdAt: String)
-data class AuthSession(val accessToken: String, val name: String, val email: String)
+data class AuthSession(val accessToken: String, val name: String, val email: String, val apiToken: String = "")
 
 object ApiClient {
     fun register(endpoint: String, name: String, email: String, password: String): AuthSession {
         val body = JSONObject().put("name", name).put("email", email).put("password", password).toString()
-        return parseSession(request(endpoint, "/api/v1/auth/register", "POST", null, body))
+        return restoreSavedToken(endpoint, parseSession(request(endpoint, "/api/v1/auth/register", "POST", null, body)))
     }
     fun login(endpoint: String, email: String, password: String): AuthSession {
         val body = JSONObject().put("email", email).put("password", password).toString()
-        return parseSession(request(endpoint, "/api/v1/auth/login", "POST", null, body))
+        return restoreSavedToken(endpoint, parseSession(request(endpoint, "/api/v1/auth/login", "POST", null, body)))
     }
     private fun parseSession(raw: String): AuthSession {
         val json = JSONObject(raw)
         val user = json.getJSONObject("user")
         return AuthSession(json.getString("access_token"), user.optString("name"), user.getString("email"))
+    }
+    private fun restoreSavedToken(endpoint: String, session: AuthSession): AuthSession {
+        val saved = runCatching { JSONObject(request(endpoint, "/api/v1/tokens", "GET", session.accessToken, null)).optString("token") }.getOrDefault("")
+        return session.copy(apiToken = saved)
     }
     fun createApiToken(endpoint: String, sessionToken: String, name: String): String {
         val body = JSONObject().put("name", name).toString()
