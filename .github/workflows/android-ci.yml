@@ -61,8 +61,7 @@ jobs:
       - name: Explain why signed release was skipped
         if: env.RELEASE_SIGNING_READY != 'true'
         run: |
-          echo "::error::Release APK not generated: configure all four APOLO_RELEASE_* repository secrets."
-          exit 1
+          echo "::notice::Signed Release is skipped because one or more APOLO_RELEASE_* secrets are unavailable."
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -71,6 +70,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Upload signed release APK as workflow artifact
+        if: env.RELEASE_SIGNING_READY == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: apolo-data-center-signed-release-apk
@@ -78,6 +78,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
       - name: Publish APK in GitHub Releases
+        if: env.RELEASE_SIGNING_READY == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apolo-data-center-v0.2.0-build-${{ github.run_number }}
