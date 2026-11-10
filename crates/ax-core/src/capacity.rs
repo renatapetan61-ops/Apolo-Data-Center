@@ -27,6 +27,7 @@ pub struct CapacitySnapshot {
 }
 impl CapacitySnapshot {
     pub fn physical_available_bytes(&self) -> AxResult<ByteCount> {
+        if !self.hardware_verified { return Err(AxError::HardwareUnverified); }
         self.physical_total_bytes.checked_sub(self.physical_used_bytes.checked_add(self.physical_reserved_bytes)?)
     }
 }
@@ -34,14 +35,19 @@ impl CapacitySnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn snapshot(verified: bool, total: u64, used: u64, reserved: u64) -> CapacitySnapshot {
+        CapacitySnapshot { logical_quota_bytes: ByteCount::from_bytes(10_000), physical_total_bytes: ByteCount::from_bytes(total), physical_used_bytes: ByteCount::from_bytes(used), physical_reserved_bytes: ByteCount::from_bytes(reserved), hardware_verified: verified }
+    }
     #[test]
     fn logical_quota_does_not_inflate_physical_capacity() {
-        let s = CapacitySnapshot { logical_quota_bytes: ByteCount::from_bytes(10_000), physical_total_bytes: ByteCount::from_bytes(1_000), physical_used_bytes: ByteCount::from_bytes(200), physical_reserved_bytes: ByteCount::from_bytes(100), hardware_verified: true };
-        assert_eq!(s.physical_available_bytes().unwrap().as_bytes(), 700);
+        assert_eq!(snapshot(true, 1_000, 200, 100).physical_available_bytes().unwrap().as_bytes(), 700);
     }
     #[test]
     fn rejects_overcommitted_physical_inventory() {
-        let s = CapacitySnapshot { logical_quota_bytes: ByteCount::from_bytes(1_000), physical_total_bytes: ByteCount::from_bytes(100), physical_used_bytes: ByteCount::from_bytes(80), physical_reserved_bytes: ByteCount::from_bytes(30), hardware_verified: true };
-        assert!(s.physical_available_bytes().is_err());
+        assert!(snapshot(true, 100, 80, 30).physical_available_bytes().is_err());
+    }
+    #[test]
+    fn rejects_unverified_physical_inventory() {
+        assert_eq!(snapshot(false, 1_000, 100, 100).physical_available_bytes(), Err(AxError::HardwareUnverified));
     }
 }
