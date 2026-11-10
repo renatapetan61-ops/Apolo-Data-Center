@@ -153,7 +153,8 @@ fn app(state: AppState) -> Router {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let bind = env::var("APOLO_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".into());
+    let port = env::var("PORT").unwrap_or_else(|_| "10000".into());
+    let bind = env::var("APOLO_BIND_ADDR").unwrap_or_else(|_| format!("0.0.0.0:{port}"));
     let address: SocketAddr = bind.parse()?;
     let database = if let Ok(url) = env::var("DATABASE_URL") {
         let pool = PgPoolOptions::new().max_connections(10).connect(&url).await?;
