@@ -197,7 +197,7 @@ mod tests {
     fn node(id: &str) -> NodeInventory {
         NodeInventory {
             node_id: id.into(), state: NodeState::Healthy, cpu_cores: 8,
-            memory_total_bytes: ByteCount::from_bytes(64), memory_used_bytes: ByteCount::ZERO,
+            memory_total_bytes: ByteCount::from_bytes(256), memory_used_bytes: ByteCount::ZERO,
             storage_total_bytes: ByteCount::from_bytes(1_000), storage_used_bytes: ByteCount::ZERO,
             storage_reserved_bytes: ByteCount::ZERO, network_mbps: 10_000,
             accelerators: vec![], observed_at_unix: 1_800_000_000, hardware_verified: true,
