@@ -310,7 +310,7 @@ pub(crate) fn router()->Router<AppState>{
  .route("/api/v1/projects/{pid}/files",get(list_files))
  .route("/api/v1/projects/{pid}/files/{filename}",post(upload_file))
  .route("/api/v1/projects/{pid}/files/{fid}/download",get(download_file))
- .route("/api/v1/projects/{pid}/files/{fid}",axum::routing::delete(delete_file))
+ .route("/api/v1/projects/{pid}/files/id/{fid}",axum::routing::delete(delete_file))
  .route("/api/v1/projects/{pid}/models",get(list_models).post(create_model))
  .route("/api/v1/projects/{pid}/assistant/chat",post(kimi_chat))
  .route("/api/v1/projects/{pid}/models/generate",post(generate_model))
