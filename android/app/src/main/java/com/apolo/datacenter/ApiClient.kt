@@ -4,6 +4,7 @@ import org.json.JSONObject
 import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 data class ProjectInfo(val id: String, val name: String, val description: String, val createdAt: String)
 data class AuthSession(val accessToken: String, val name: String, val email: String, val apiToken: String = "")
@@ -54,6 +55,12 @@ object ApiClient {
             JSONArray(request(endpoint, "$root/models", "GET", token, null)),
             JSONArray(request(endpoint, "$root/training", "GET", token, null)))
     }
+
+    fun vtaPlan(endpoint: String, token: String, parameters: String): String {
+        val encoded = URLEncoder.encode(parameters, "UTF-8")
+        return request(endpoint, "/api/v1/vta/plan?parameters=$encoded", "GET", token, null)
+    }
+
     fun askKimi(endpoint: String, token: String, projectId: String, message: String): String {
         val body = JSONObject().put("message", message).toString()
         return JSONObject(request(endpoint, "/api/v1/projects/$projectId/assistant/chat", "POST", token, body)).optString("content", "Sem conteúdo.")
