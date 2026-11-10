@@ -51,7 +51,7 @@ jobs:
           APOLO_RELEASE_KEY_ALIAS: ${{ secrets.APOLO_RELEASE_KEY_ALIAS }}
           APOLO_RELEASE_KEY_PASSWORD: ${{ secrets.APOLO_RELEASE_KEY_PASSWORD }}
         run: |
-          gradle --no-daemon clean assembleRelease
+          gradle --no-daemon assembleRelease
           APK="app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK"
