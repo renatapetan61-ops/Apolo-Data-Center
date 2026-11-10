@@ -27,6 +27,10 @@ struct ModelInput { name: String, #[serde(default="default_arch")] architecture:
 fn default_arch()->String{"transformer".into()}
 #[derive(Serialize, FromRow)]
 struct ModelRow { id: Uuid, name: String, architecture: String, parameters: Option<i64>, config: serde_json::Value, status: String, created_at: time::OffsetDateTime }
+
+#[derive(Deserialize)]
+struct GenerateInput { name: String, parameters: Option<i64>, description: String }
+
 #[derive(Deserialize)]
 struct TrainInput { model_id: Option<Uuid>, #[serde(default)] config: serde_json::Value }
 #[derive(Serialize, FromRow)]
@@ -207,6 +211,38 @@ async fn kimi_chat(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderM
  let _=owner;
  Ok(Json(serde_json::json!({"model":model,"content":content,"system_prompt":"apolo-llm-engineer-v1"})))
 }
+
+async fn generate_model(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderMap,Json(input):Json<GenerateInput>)->Result<(StatusCode,Json<serde_json::Value>),StatusCode>{
+ let owner=authorize(&s,&headers).await?; owned_project(&s,&headers,pid).await?;
+ if input.name.trim().is_empty()||input.name.len()>160||input.description.len()>30000||input.parameters.unwrap_or(0)<0{return Err(StatusCode::BAD_REQUEST)}
+ let key=env::var("NVIDIA_NIM_API_KEY").map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
+ let model=env::var("NVIDIA_NIM_MODEL").unwrap_or_else(|_|"moonshotai/kimi-k3.1-pro".into());
+ let request=format!("Crie os arquivos iniciais do LLM solicitado. Nome: {}. Parâmetros pretendidos: {:?}. Requisitos do usuário: {}. Retorne SOMENTE JSON válido com chaves model_config (objeto), model_py (código PyTorch), train_py (código Python executável), readme (texto). Gere decoder Transformer pequeno e funcional como scaffold se a escala não for viável. Não alegue modelo pré-treinado. O train_py deve ler JSONL tokenizado com input_ids, usar AdamW, clipping, métricas e salvar checkpoints. Inclua limites e estimativa de recursos em readme.",input.name,input.parameters,input.description);
+ let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(180)).build().map_err(|_|StatusCode::BAD_GATEWAY)?;
+ let response=client.post("https://integrate.api.nvidia.com/v1/chat/completions").bearer_auth(key)
+ .json(&serde_json::json!({"model":model,"messages":[{"role":"system","content":SYSTEM_PROMPT},{"role":"user","content":request}],"temperature":0.1,"max_tokens":16000}))
+ .send().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
+ let status=response.status();let value:serde_json::Value=response.json().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
+ if !status.is_success(){eprintln!("NVIDIA NIM returned HTTP {status}: {}",value);return Err(if status.as_u16()==429{StatusCode::TOO_MANY_REQUESTS}else{StatusCode::BAD_GATEWAY})}
+ let content=value.pointer("/choices/0/message/content").and_then(|v|v.as_str()).ok_or(StatusCode::BAD_GATEWAY)?.trim();
+ let artifacts:serde_json::Value=serde_json::from_str(content).map_err(|_|StatusCode::BAD_GATEWAY)?;
+ let model_py=artifacts.get("model_py").and_then(|v|v.as_str()).ok_or(StatusCode::BAD_GATEWAY)?;
+ let train_py=artifacts.get("train_py").and_then(|v|v.as_str()).ok_or(StatusCode::BAD_GATEWAY)?;
+ let readme=artifacts.get("readme").and_then(|v|v.as_str()).unwrap_or("Scaffold gerado via NVIDIA NIM; nao e modelo pre-treinado.");
+ let config=artifacts.get("model_config").cloned().unwrap_or_else(||serde_json::json!({"architecture":"transformer","framework":"pytorch"}));
+ if model_py.len()>256000||train_py.len()>256000||readme.len()>64000{return Err(StatusCode::PAYLOAD_TOO_LARGE)}
+ let db=database(&s)?;let root=storage_root()?;
+ let row=sqlx::query_as::<_,ModelRow>("INSERT INTO project_models(project_id,user_id,name,architecture,parameters,config) VALUES($1,$2,$3,'transformer',$4,$5) RETURNING id,name,architecture,parameters,config,status,created_at")
+ .bind(pid).bind(owner).bind(input.name.trim()).bind(input.parameters).bind(config.clone())
+ .fetch_one(db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ let config_text=serde_json::to_string_pretty(&config).map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ persist_generated_file(db,&root,pid,owner,"model_config.json","config",&config_text).await?;
+ persist_generated_file(db,&root,pid,owner,"model.py","file",model_py).await?;
+ persist_generated_file(db,&root,pid,owner,"train.py","file",train_py).await?;
+ persist_generated_file(db,&root,pid,owner,"README-LLM.md","file",readme).await?;
+ Ok((StatusCode::CREATED,Json(serde_json::json!({"model":row,"files":["model_config.json","model.py","train.py","README-LLM.md"],"provider":"NVIDIA NIM","model_id":model}))))
+}
+
 async fn create_training(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderMap,Json(input):Json<TrainInput>)->Result<(StatusCode,Json<JobRow>),StatusCode>{
  let owner=authorize(&s,&headers).await?; owned_project(&s,&headers,pid).await?;
  let db=database(&s)?;
@@ -277,6 +313,7 @@ pub(crate) fn router()->Router<AppState>{
  .route("/api/v1/projects/{pid}/files/{fid}",axum::routing::delete(delete_file))
  .route("/api/v1/projects/{pid}/models",get(list_models).post(create_model))
  .route("/api/v1/projects/{pid}/assistant/chat",post(kimi_chat))
+ .route("/api/v1/projects/{pid}/models/generate",post(generate_model))
  .route("/api/v1/projects/{pid}/training",get(list_jobs).post(create_training))
  .route("/api/v1/workers",post(register_worker))
  .route("/api/v1/workers/{id}/heartbeat",post(heartbeat))
