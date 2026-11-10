@@ -77,6 +77,11 @@ async fn upload_file(State(s):State<AppState>,Path((pid,filename)):Path<(Uuid,St
  let row=sqlx::query_as::<_,ProjectFile>("INSERT INTO project_files(project_id,user_id,filename,content_type,size_bytes,sha256,storage_key,kind) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,filename,content_type,size_bytes,sha256,kind,created_at")
  .bind(pid).bind(owner).bind(name).bind(content_type).bind(body.len() as i64).bind(digest).bind(key).bind(kind)
  .fetch_one(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ if kind=="model"{
+  let config=serde_json::json!({"imported_file_id":row.id,"filename":row.filename,"content_type":row.content_type});
+  sqlx::query("INSERT INTO project_models(project_id,user_id,name,architecture,config,status) VALUES($1,$2,$3,'imported',$4,'imported')")
+   .bind(pid).bind(owner).bind(row.filename.clone()).bind(config).execute(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+ }
  Ok((StatusCode::CREATED,Json(row)))
 }
 async fn download_file(State(s):State<AppState>,Path((pid,fid)):Path<(Uuid,Uuid)>,headers:HeaderMap)->Result<([(axum::http::HeaderName,axum::http::HeaderValue);2],Bytes),StatusCode>{
