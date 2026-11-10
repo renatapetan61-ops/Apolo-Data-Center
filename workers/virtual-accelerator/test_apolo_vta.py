@@ -25,6 +25,11 @@ class VtaPlannerTests(unittest.TestCase):
         result = assess("centilhão", estimate_capacity([]))
         self.assertFalse(result["feasible"])
 
+    def test_100_novemdecillion_is_rejected(self):
+        result = assess("100 novemdecillion", estimate_capacity([]))
+        self.assertFalse(result["feasible"])
+        self.assertIn("fisicamente", result["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()
