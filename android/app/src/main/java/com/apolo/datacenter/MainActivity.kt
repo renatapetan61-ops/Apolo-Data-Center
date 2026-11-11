@@ -49,7 +49,7 @@ private data class ApiSnapshot(
 )
 
 class MainActivity : ComponentActivity() {
-    private val executor = Executors.newSingleThreadExecutor()
+    private val executor = Executors.newFixedThreadPool(4)
     private var resumeTick by mutableIntStateOf(0)
 
     override fun onResume() {
@@ -189,8 +189,8 @@ class MainActivity : ComponentActivity() {
     private fun get(address: String): String {
         val connection = (URL(address).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 8_000
-            readTimeout = 8_000
+            connectTimeout = 20_000
+            readTimeout = 45_000
             setRequestProperty("Accept", "application/json")
         }
         try {
