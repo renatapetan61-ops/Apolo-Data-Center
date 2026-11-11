@@ -47,12 +47,12 @@ O endpoint inicial `https://api.apolo-datacenter.example` é um placeholder. Tro
 A integração JNI entre Kotlin e bibliotecas Rust, armazenamento local seguro de credenciais, autenticação de usuário e push de inventário de agentes ainda não foram implementados.
 
 
-## Workspaces de projetos, Kimi e workers AX
+## Workspaces de projetos, MiniMax e workers AX
 
 O backend adiciona APIs autenticadas para:
 - Arquivos, datasets e checkpoints por projeto, com SHA-256 e metadados no PostgreSQL.
 - Modelos e scaffold PyTorch gerado ao criar um registro de LLM: model_config.json, model.py, train.py e README-LLM.md.
-- Assistente Kimi via NVIDIA NIM. Configure NVIDIA_NIM_API_KEY como variável secreta no serviço Railway. O identificador padrão é moonshotai/kimi-k3.1-pro.
+- Assistente MiniMax M3.1 Flash via NVIDIA NIM. Configure NVIDIA_NIM_API_KEY como variável secreta no serviço Railway. O identificador padrão é minimaxai/minimax-m3.1-flash. Endpoint padrão: https://integrate.api.nvidia.com/v1.
 - Jobs, métricas, checkpoints e protocolo de registro, heartbeat, claim e conclusão de workers AX.
 
 ### Armazenamento persistente
@@ -70,7 +70,7 @@ O agente reporta hardware, envia heartbeat, reivindica jobs, executa o train.py 
 
 ### Limites da execução atual
 
-O scaffold gerado é um modelo Transformer pequeno de partida, não um LLM pré-treinado nem uma cópia do Kimi. O endpoint de treino exige dataset e worker online com pelo menos 2 CPUs e 4 GiB RAM e bloqueia registros acima de 25 milhões de parâmetros nesse executor inicial. Treinos maiores, distribuídos multi-GPU, MoE em escala e modelos de centenas de bilhões/trilhões exigem workers especializados, armazenamento e comunicação distribuída adicionais; não são simulados.
+O scaffold gerado é um modelo Transformer pequeno de partida, não um LLM pré-treinado nem uma cópia do MiniMax. O endpoint de treino exige dataset e worker online com pelo menos 2 CPUs e 4 GiB RAM e bloqueia registros acima de 25 milhões de parâmetros nesse executor inicial. Treinos maiores, distribuídos multi-GPU, MoE em escala e modelos de centenas de bilhões/trilhões exigem workers especializados, armazenamento e comunicação distribuída adicionais; não são simulados.
 
 ## APOLO VTA — Virtual Tensor Accelerator
 
