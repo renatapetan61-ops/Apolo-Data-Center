@@ -1,4 +1,5 @@
 name: Android APK Build
+# Rebuild Android artifacts after the NVIDIA NIM production-key redeploy.
 on:
   push:
     branches: [main]
