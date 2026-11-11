@@ -50,6 +50,13 @@ private data class ApiSnapshot(
 
 class MainActivity : ComponentActivity() {
     private val executor = Executors.newSingleThreadExecutor()
+    private var resumeTick by mutableIntStateOf(0)
+
+    override fun onResume() {
+        super.onResume()
+        // Recheck the backend every time the app returns to the foreground.
+        resumeTick++
+    }
     private val preferences by lazy { getSharedPreferences("apolo_settings", Context.MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,12 +73,19 @@ class MainActivity : ComponentActivity() {
                     initialEndpoint = initialEndpoint,
                     initialToken = initialToken,
                     initialSession = initialSession,
+                    resumeTick = resumeTick,
                     onSaveEndpoint = { value -> preferences.edit().putString("api_endpoint", value).apply() },
                     onSaveSession = { value -> SecureTokenStore.writeSession(this, value) },
                     onSaveToken = { value -> SecureTokenStore.write(this, value) },
                     onConnect = { endpoint, callback ->
                         executor.execute {
                             val result = runCatching { fetchSnapshot(endpoint) }
+                            runOnUiThread { callback(result) }
+                        }
+                    },
+                    onValidateSession = { endpoint, session, callback ->
+                        executor.execute {
+                            val result = runCatching { ApiClient.validateSession(endpoint, session) }
                             runOnUiThread { callback(result) }
                         }
                     },
@@ -211,10 +225,12 @@ private fun ApoloApplication(
     initialEndpoint: String,
     initialToken: String,
     initialSession: String,
+    resumeTick: Int,
     onSaveEndpoint: (String) -> Unit,
     onSaveToken: (String) -> Unit,
     onSaveSession: (String) -> Unit,
     onConnect: (String, (Result<ApiSnapshot>) -> Unit) -> Unit,
+    onValidateSession: (String, String, (Result<Boolean>) -> Unit) -> Unit,
     onAuthenticate: (String, String, String, String, Boolean, (Result<AuthSession>) -> Unit) -> Unit,
     onGenerateToken: (String, String, String, (Result<String>) -> Unit) -> Unit,
     onProjectAction: (String, String, ProjectAction, String, String, String, (Result<List<ProjectInfo>>) -> Unit) -> Unit,
@@ -229,7 +245,8 @@ private fun ApoloApplication(
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("API ainda não conectada") }
     var connected by remember { mutableStateOf(false) }
-    var authenticated by remember { mutableStateOf(initialSession.length >= 32) }
+    var authenticated by remember { mutableStateOf(false) }
+    var checkingSession by remember { mutableStateOf(initialSession.length >= 32) }
     var sessionToken by remember { mutableStateOf(initialSession) }
     var authLoading by remember { mutableStateOf(false) }
     var authMessage by remember { mutableStateOf("") }
@@ -239,6 +256,7 @@ private fun ApoloApplication(
     var tokenMessage by remember { mutableStateOf("") }
 
     fun connect() {
+        if (loading) return
         loading = true
         message = "Conectando ao control plane…"
         onConnect(endpoint) { result ->
@@ -252,6 +270,54 @@ private fun ApoloApplication(
                 message = it.message ?: "Não foi possível conectar"
             }
         }
+    }
+
+    // A saved token is not automatically trusted: validate it against the API.
+    // If the backend is temporarily unreachable, keep the session and show OFFLINE;
+    // only an explicit 401/403 returns the user to login/registration.
+    LaunchedEffect(initialSession, endpoint) {
+        if (initialSession.length >= 32) {
+            checkingSession = true
+            onValidateSession(endpoint, initialSession) { result ->
+                checkingSession = false
+                result.onSuccess { valid ->
+                    if (valid) {
+                        sessionToken = initialSession
+                        authenticated = true
+                    } else {
+                        sessionToken = ""
+                        authenticated = false
+                        apiToken = ""
+                        onSaveSession("")
+                        onSaveToken("")
+                        authMessage = "Sua sessão expirou. Entre novamente ou crie uma conta."
+                    }
+                }.onFailure {
+                    sessionToken = initialSession
+                    authenticated = true
+                    message = "Não foi possível validar a sessão porque o backend está indisponível."
+                }
+            }
+        } else {
+            checkingSession = false
+            authenticated = false
+        }
+    }
+
+    // The status is live, not a value persisted from the previous process.
+    // Reconnect on first composition, endpoint changes and every foreground return.
+    LaunchedEffect(resumeTick, endpoint) {
+        connect()
+    }
+
+    if (checkingSession) {
+        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                CircularProgressIndicator(color = Accent)
+                Text("Verificando sua sessão segura…", color = TextMuted)
+            }
+        }
+        return
     }
 
     if (!authenticated) {
