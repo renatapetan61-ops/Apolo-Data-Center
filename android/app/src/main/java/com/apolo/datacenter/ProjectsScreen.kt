@@ -58,12 +58,25 @@ internal fun ProjectsScreen(
         }
     }
     fun loadProjects(action: ProjectAction, id: String = "") {
+        // Trava a operação no estado da tela para ignorar toques repetidos.
+        if (loading) return
         if (token.length < 32) { message = "Configure o token da API em Ajustes."; return }
+        if (action == ProjectAction.CREATE && name.isBlank()) {
+            message = "Informe o nome do projeto."
+            return
+        }
         loading = true
-        onAction(action,name,description,id) { result ->
+        message = if (action == ProjectAction.CREATE) "Criando um único projeto…" else "Atualizando projetos…"
+        onAction(action,name.trim(),description.trim(),id) { result ->
             loading = false
-            result.onSuccess { loaded -> projects=loaded; if(action==ProjectAction.CREATE){name="";description=""}; message=loaded.size.toString()+" projeto(s) carregado(s)." }
-                .onFailure { message=it.message ?: "Falha ao acessar projetos." }
+            result.onSuccess { loaded ->
+                projects = loaded
+                if (action == ProjectAction.CREATE) { name = ""; description = "" }
+                message = if (action == ProjectAction.CREATE) "Projeto criado com sucesso. ${loaded.size} projeto(s) na conta."
+                    else loaded.size.toString()+" projeto(s) carregado(s)."
+            }.onFailure { error ->
+                message = error.message ?: "Falha ao acessar projetos."
+            }
         }
     }
     fun refreshWorkspace(p: ProjectInfo) {
