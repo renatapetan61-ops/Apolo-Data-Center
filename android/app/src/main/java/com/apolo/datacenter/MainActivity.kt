@@ -259,10 +259,10 @@ private fun ApoloApplication(
                     authLoading = false
                     result.onSuccess { session ->
                         sessionToken = session.accessToken
-                        if (session.apiToken.isNotBlank()) {
-                            apiToken = session.apiToken
-                            onSaveToken(session.apiToken)
-                        }
+                        // Sempre substituir a credencial local pela da conta que acabou de entrar.
+                        // Evita reaproveitar o token de outra conta e recupera acesso após reinstalação.
+                        apiToken = session.apiToken.ifBlank { session.accessToken }
+                        onSaveToken(apiToken)
                         onSaveSession(session.accessToken)
                         authenticated = true
                         authMessage = ""
