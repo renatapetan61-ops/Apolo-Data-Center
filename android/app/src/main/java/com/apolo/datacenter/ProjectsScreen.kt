@@ -36,7 +36,8 @@ internal fun ProjectsScreen(
     var models by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var jobs by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var assistantInput by remember { mutableStateOf("") }
-    var assistantOutput by remember { mutableStateOf("Assistente de engenharia de LLMs APOLO AX. Descreva o modelo que deseja projetar.") }
+    var assistantHistory by remember { mutableStateOf(listOf<Pair<String, String>>()) }
+    var assistantOutput by remember { mutableStateOf("Assistente de engenharia de LLMs APOLO AX · Kimi K3.1 Pro via NVIDIA NIM. Descreva o modelo que deseja projetar.") }
     var modelName by remember { mutableStateOf("") }
     var parameters by remember { mutableStateOf("1000000") }
     var vtaParameters by remember { mutableStateOf("1000000") }
@@ -148,9 +149,22 @@ internal fun ProjectsScreen(
                 Text(assistantOutput,color=Color(0xFFEAF1FC),fontSize=12.sp)
                 OutlinedTextField(assistantInput,{assistantInput=it},modifier=Modifier.fillMaxWidth(),label={Text("Descreva o LLM que deseja criar")},minLines=3)
                 Button(onClick={
-                    val q=assistantInput;assistantInput="";busy=true
-                    onWorkspaceAction(p.id,"CHAT",q,""){r->busy=false;r.onSuccess{assistantOutput=it}.onFailure{assistantOutput=it.message?:"Falha no Kimi/NVIDIA NIM."}}
-                },enabled=assistantInput.isNotBlank()&&!busy,modifier=Modifier.fillMaxWidth()){Text("Consultar Kimi")}
+                    val q=assistantInput.trim()
+                    val history=org.json.JSONArray().apply {
+                        assistantHistory.takeLast(30).forEach { (role, content) ->
+                            put(JSONObject().put("role",role).put("content",content))
+                        }
+                    }
+                    val payload=JSONObject().put("message",q).put("history",history).toString()
+                    assistantInput="";busy=true
+                    onWorkspaceAction(p.id,"CHAT",payload,""){r->
+                        busy=false
+                        r.onSuccess{
+                            assistantOutput=it
+                            assistantHistory=(assistantHistory+("user" to q)+("assistant" to it)).takeLast(30)
+                        }.onFailure{assistantOutput=it.message?:"Falha no Kimi/NVIDIA NIM."}
+                    }
+                },enabled=assistantInput.isNotBlank()&&!busy,modifier=Modifier.fillMaxWidth()){Text("Enviar para Kimi K3.1 Pro")}
             }
 
             item {

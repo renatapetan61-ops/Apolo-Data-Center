@@ -107,7 +107,14 @@ class MainActivity : ComponentActivity() {
                             val result = runCatching {
                                 when (action) {
                                     "LOAD" -> { val w=ApiClient.workspace(endpoint,token,projectId); JSONObject().put("files",w.files).put("models",w.models).put("jobs",w.jobs).toString() }
-                                    "CHAT" -> ApiClient.askKimi(endpoint,token,projectId,payload.substringBefore("\n"))
+                                    "CHAT" -> {
+                                        val chat = JSONObject(payload)
+                                        ApiClient.askKimi(
+                                            endpoint, token, projectId,
+                                            chat.getString("message"),
+                                            chat.optJSONArray("history") ?: JSONArray()
+                                        )
+                                    }
                                     "MODEL" -> { val rest=payload.substringAfter("\n"); ApiClient.generateModel(endpoint,token,projectId,payload.substringBefore("\n"),rest.substringBefore("\n").toLongOrNull() ?: 0L,rest.substringAfter("\n","")) }
                                     "TRAIN" -> ApiClient.startTraining(endpoint,token,projectId,payload)
                                     "VTA" -> ApiClient.vtaPlan(endpoint,token,payload)

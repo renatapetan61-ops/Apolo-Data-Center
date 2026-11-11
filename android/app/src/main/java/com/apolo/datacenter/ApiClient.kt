@@ -61,8 +61,8 @@ object ApiClient {
         return request(endpoint, "/api/v1/vta/plan?parameters=$encoded", "GET", token, null)
     }
 
-    fun askKimi(endpoint: String, token: String, projectId: String, message: String): String {
-        val body = JSONObject().put("message", message).toString()
+    fun askKimi(endpoint: String, token: String, projectId: String, message: String, history: JSONArray = JSONArray()): String {
+        val body = JSONObject().put("message", message).put("history", history).toString()
         return JSONObject(request(endpoint, "/api/v1/projects/$projectId/assistant/chat", "POST", token, body)).optString("content", "Sem conteúdo.")
     }
 
