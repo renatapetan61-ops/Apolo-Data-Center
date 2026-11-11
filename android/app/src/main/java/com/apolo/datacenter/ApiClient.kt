@@ -60,6 +60,11 @@ object ApiClient {
             JSONArray(request(endpoint, "$root/training", "GET", token, null)))
     }
 
+    fun vtaStorage(endpoint: String, token: String, initialize: Boolean = false): String {
+        val route = if (initialize) "/api/v1/vta2/initialize" else "/api/v1/vta2/storage"
+        return request(endpoint, route, if (initialize) "POST" else "GET", token, if (initialize) "{}" else null)
+    }
+
     fun vtaPlan(endpoint: String, token: String, parameters: String): String {
         val encoded = URLEncoder.encode(parameters, "UTF-8")
         return request(endpoint, "/api/v1/vta/plan?parameters=$encoded", "GET", token, null)
