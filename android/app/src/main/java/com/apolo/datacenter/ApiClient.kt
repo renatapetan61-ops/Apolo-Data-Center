@@ -135,7 +135,7 @@ object ApiClient {
             val code = c.responseCode
             val stream = if (code in 200..299) c.inputStream else c.errorStream
             val result = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            check(code in 200..299) { when(code) { 401 -> "Token inválido."; 404 -> "Projeto ou arquivo não encontrado."; 409 -> "Nenhum worker AX compatível está ativo."; 413 -> "Arquivo maior que 100 MB."; 424 -> "O endpoint NVIDIA recusou o modelo. O Kimi K3.1 Pro no endpoint público NVIDIA está em preview e não aceita chamadas programáticas; configure um Partner Endpoint/NIM dedicado em NVIDIA_NIM_BASE_URL."; 503 -> "Armazenamento persistente ou NVIDIA NIM não configurado." else -> "Servidor respondeu HTTP $code: $result" } }
+            check(code in 200..299) { when(code) { 401 -> "Token inválido."; 404 -> "Projeto ou arquivo não encontrado."; 409 -> "Nenhum worker AX compatível está ativo."; 413 -> "Arquivo maior que 100 MB."; 424 -> "O endpoint NVIDIA recusou o modelo. O MiniMax M3.1 Flash está disponível no endpoint gratuito da NVIDIA para prototipagem; confira a chave NVIDIA_NIM_API_KEY e os limites do provedor."; 503 -> "Armazenamento persistente ou NVIDIA NIM não configurado." else -> "Servidor respondeu HTTP $code: $result" } }
             return result
         } finally { c.disconnect() }
     }
@@ -170,7 +170,7 @@ object ApiClient {
                     404 -> "Recurso não encontrado."
                     409 -> "Operação bloqueada: confira e-mail duplicado, dataset enviado e worker AX online."
                     503 -> "Serviço indisponível: confira PostgreSQL, volume APOLO_STORAGE_DIR e o secret NVIDIA_NIM_API_KEY."
-                    424 -> "O endpoint NVIDIA não autorizou este modelo. O Kimi K3.1 Pro no endpoint público está em preview; configure um Partner Endpoint/NIM dedicado."; 502 -> "Falha de comunicação com NVIDIA NIM. Verifique os logs do backend e a disponibilidade do endpoint."
+                    424 -> "O endpoint NVIDIA não autorizou este modelo. O MiniMax M3.1 Flash está disponível no endpoint gratuito NVIDIA para prototipagem; confira a chave e os limites do provedor."; 502 -> "Falha de comunicação com NVIDIA NIM. Verifique os logs do backend e a disponibilidade do endpoint."
                     413 -> "Solicitação excede o limite de tamanho ou de parâmetros suportado."
                     else -> "Servidor respondeu HTTP $code."
                 }
