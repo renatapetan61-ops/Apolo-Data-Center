@@ -124,6 +124,12 @@ class MainActivity : ComponentActivity() {
                             runOnUiThread { callback(result) }
                         }
                     },
+                    onStorageAction = { endpoint, token, initialize, callback ->
+                        executor.execute {
+                            val result = runCatching { ApiClient.vtaStorage(endpoint, token, initialize) }
+                            runOnUiThread { callback(result) }
+                        }
+                    },
                     onUploadFile = { endpoint, token, projectId, uri, kind, callback ->
                         executor.execute {
                             val result = runCatching {
@@ -213,7 +219,8 @@ private fun ApoloApplication(
     onGenerateToken: (String, String, String, (Result<String>) -> Unit) -> Unit,
     onProjectAction: (String, String, ProjectAction, String, String, String, (Result<List<ProjectInfo>>) -> Unit) -> Unit,
     onWorkspaceAction: (String, String, String, String, String, (Result<String>) -> Unit) -> Unit,
-    onUploadFile: (String, String, String, Uri, String, (Result<String>) -> Unit) -> Unit
+    onUploadFile: (String, String, String, Uri, String, (Result<String>) -> Unit) -> Unit,
+    onStorageAction: (String, String, Boolean, (Result<String>) -> Unit) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(AppTab.HOME) }
     var endpoint by remember { mutableStateOf(initialEndpoint) }
@@ -324,10 +331,11 @@ private fun ApoloApplication(
     ) { padding ->
         when (selectedTab) {
             AppTab.HOME -> HomeScreen(Modifier.padding(padding), snapshot, message, loading, ::connect) { selectedTab = it }
-            AppTab.STORAGE -> CapabilityScreen(
-                Modifier.padding(padding), "Armazenamento AX", "Objetos, volumes e ingestão de dados",
-                listOf("Object Storage", "Upload e ingestão", "Integridade SHA-256", "Replicação e recuperação"),
-                "O AX Storage possui adapter local e verificação de integridade. A API ainda não expõe operações autenticadas de armazenamento."
+            AppTab.STORAGE -> VtaStorageScreen(
+                modifier = Modifier.padding(padding),
+                token = apiToken,
+                endpoint = endpoint,
+                onStorageAction = onStorageAction
             )
             AppTab.COMPUTE -> CapabilityScreen(
                 Modifier.padding(padding), "Computação AX", "Execução, filas e aceleradores",
@@ -482,6 +490,76 @@ private fun ModuleCard(title: String, subtitle: String, symbol: String, onClick:
                 Text(subtitle, color = TextMuted, fontSize = 11.sp)
             }
             Text("›", color = Accent, fontSize = 25.sp)
+        }
+    }
+}
+
+
+@Composable
+private fun VtaStorageScreen(
+    modifier: Modifier,
+    token: String,
+    endpoint: String,
+    onStorageAction: (String, String, Boolean, (Result<String>) -> Unit) -> Unit
+) {
+    var status by remember { mutableStateOf<JSONObject?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("Consulte o volume conectado ao APOLO Data Center.") }
+    fun refresh(initialize: Boolean) {
+        loading = true
+        message = if (initialize) "Preparando diretórios VTA 2.0 no volume…" else "Consultando capacidade física do volume…"
+        onStorageAction(endpoint, token, initialize) { result ->
+            loading = false
+            result.onSuccess {
+                status = JSONObject(it)
+                message = if (initialize) "Estrutura VTA 2.0 criada no volume conectado." else "Status do armazenamento atualizado."
+            }.onFailure { error -> message = error.message ?: "Falha ao consultar armazenamento." }
+        }
+    }
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            Text("APOLO VTA 2.0", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            Text("Armazenamento interno", color = TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("Volume conectado ao APOLO Data Center · quota lógica configurada de 999 TB", color = TextMuted, fontSize = 13.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.fillMaxWidth().padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("CAPACIDADE LÓGICA", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("999 TB", color = Accent, fontSize = 34.sp, fontWeight = FontWeight.Black)
+                    Text("Limite lógico de projeto; não representa espaço físico já provisionado.", color = TextMuted, fontSize = 11.sp)
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("VOLUME FÍSICO CONECTADO", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Total: " + (status?.optLong("physical_filesystem_total_bytes")?.takeIf { it > 0 }?.let { "%.2f GB".format(it / 1_000_000_000.0) } ?: "Aguardando leitura"), color = TextPrimary)
+                    Text("Disponível: " + (status?.optLong("physical_filesystem_available_bytes")?.takeIf { it > 0 }?.let { "%.2f GB".format(it / 1_000_000_000.0) } ?: "—"), color = TextPrimary)
+                    Text("Utilizado: " + (status?.optLong("physical_filesystem_used_bytes")?.takeIf { it > 0 }?.let { "%.2f GB".format(it / 1_000_000_000.0) } ?: "—"), color = TextPrimary)
+                    Text("Montagem: " + (status?.optString("mount_path") ?: "/data/apolo"), color = TextMuted, fontSize = 11.sp)
+                    Text("Diretórios VTA prontos: " + if (status?.optBoolean("directories_ready") == true) "Sim" else "Não", color = TextMuted, fontSize = 11.sp)
+                }
+            }
+        }
+        item {
+            Text("CAMADAS DE ARMAZENAMENTO", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            listOf("VTA Cache · blocos quentes", "VTA RAM Spill · spill em disco, não RAM física", "VTA NVMe · pesos e shards", "VTA Archive · datasets e checkpoints", "VTA Models · artefatos de modelos").forEach { label ->
+                Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(12.dp), modifier = Modifier.padding(top = 7.dp)) {
+                    Text(label, color = TextPrimary, modifier = Modifier.fillMaxWidth().padding(13.dp), fontSize = 12.sp)
+                }
+            }
+        }
+        item {
+            Text(message, color = TextMuted, fontSize = 12.sp)
+            Button(onClick = { refresh(false) }, enabled = !loading && token.length >= 32, modifier = Modifier.fillMaxWidth()) {
+                Text(if (loading) "Aguarde…" else "Atualizar capacidade física")
+            }
+            OutlinedButton(onClick = { refresh(true) }, enabled = !loading && token.length >= 32, modifier = Modifier.fillMaxWidth()) {
+                Text("Conectar / preparar armazenamento VTA 2.0")
+            }
+            Text(status?.optString("warning") ?: "Os 999 TB são uma quota lógica. O volume real precisa ser ampliado no provedor de infraestrutura para armazenar essa quantidade.", color = Warning, fontSize = 11.sp)
         }
     }
 }
