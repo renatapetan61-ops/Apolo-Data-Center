@@ -40,19 +40,6 @@ object ApiClient {
         }
     }
 
-atacenter
-
-import org.json.JSONObject
-import org.json.JSONArray
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
-
-data class ProjectInfo(val id: String, val name: String, val description: String, val createdAt: String)
-data class AuthSession(val accessToken: String, val name: String, val email: String, val apiToken: String = "")
-data class WorkspaceSnapshot(val files: JSONArray, val models: JSONArray, val jobs: JSONArray)
-
-object ApiClient {
     fun register(endpoint: String, name: String, email: String, password: String): AuthSession {
         val body = JSONObject().put("name", name).put("email", email).put("password", password).toString()
         return restoreSavedToken(endpoint, parseSession(request(endpoint, "/api/v1/auth/register", "POST", null, body)))
