@@ -178,7 +178,6 @@ object ApiClient {
             return response
         } finally { connection.disconnect() }
     }
-}
     fun register(endpoint: String, name: String, email: String, password: String): AuthSession {
         val body = JSONObject().put("name", name).put("email", email).put("password", password).toString()
         return restoreSavedToken(endpoint, parseSession(request(endpoint, "/api/v1/auth/register", "POST", null, body)))
