@@ -25,8 +25,12 @@ object ApiClient {
         return AuthSession(json.getString("access_token"), user.optString("name"), user.getString("email"))
     }
     private fun restoreSavedToken(endpoint: String, session: AuthSession): AuthSession {
-        val saved = runCatching { JSONObject(request(endpoint, "/api/v1/tokens", "GET", session.accessToken, null)).optString("token") }.getOrDefault("")
-        return session.copy(apiToken = saved)
+        // Se a conta ainda não tiver um token de API, use a sessão autenticada.
+        // O backend valida ambos e os projetos continuam vinculados ao usuário.
+        val saved = runCatching {
+            JSONObject(request(endpoint, "/api/v1/tokens", "GET", session.accessToken, null)).optString("token")
+        }.getOrDefault("")
+        return session.copy(apiToken = saved.ifBlank { session.accessToken })
     }
     fun createApiToken(endpoint: String, sessionToken: String, name: String): String {
         val body = JSONObject().put("name", name).toString()
