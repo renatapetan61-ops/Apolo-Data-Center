@@ -78,6 +78,10 @@ internal fun ProjectsScreen(
             }.onFailure { message=it.message ?: "Falha ao abrir workspace." }
         }
     }
+    // Recarrega automaticamente a lista do servidor ao entrar ou trocar de conta.
+    LaunchedEffect(token) {
+        if (token.length >= 32) loadProjects(ProjectAction.LOAD)
+    }
     LazyColumn(modifier.fillMaxSize(),contentPadding=PaddingValues(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         if(selected==null) {
             item {
