@@ -35,6 +35,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
+      - name: Read app version
+        id: app-version
+        run: |
+          VERSION_NAME="$(sed -n 's/^[[:space:]]*versionName = "\\([^"]*\\)".*/\\1/p' android/app/build.gradle.kts | head -n 1)"
+          test -n "$VERSION_NAME"
+          echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
       - name: Build debug APK
         working-directory: android
         run: gradle --no-daemon assembleDebug
@@ -84,10 +90,10 @@ jobs:
         if: env.RELEASE_SIGNING_READY == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: apolo-data-center-v0.3.0-build-${{ github.run_number }}
-          name: APOLO Data Center Android v0.3.0 (build ${{ github.run_number }})
+          tag_name: apolo-data-center-v${{ steps.app-version.outputs.version }}-build-${{ github.run_number }}
+          name: APOLO Data Center Android v${{ steps.app-version.outputs.version }} (build ${{ github.run_number }})
           body: |
-            APK Release assinado do APOLO Data Center v0.3.0 com login, cadastro e emissão de tokens individuais da API.
+            APK Release assinado do APOLO Data Center v${{ steps.app-version.outputs.version }} com login, cadastro e emissão de tokens individuais da API.
             
             Instalação: baixe o arquivo APK em Assets e abra-o no Android.
             Arquitetura: APK universal; não restringe o pacote a uma ABI específica.
