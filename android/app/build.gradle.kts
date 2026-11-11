@@ -1,3 +1,4 @@
+// The release workflow reads versionName from this file.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
