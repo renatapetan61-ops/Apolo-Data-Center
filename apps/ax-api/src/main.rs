@@ -158,9 +158,20 @@ pub(crate) async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<O
         if bool::from(supplied.as_bytes().ct_eq(expected.as_bytes())) { return Ok(None); }
     }
     let db = database(state)?;
-    sqlx::query_scalar::<_,uuid::Uuid>("UPDATE api_tokens SET last_used_at=NOW() WHERE token_hash=$1 RETURNING user_id")
+    if let Some(user_id) = sqlx::query_scalar::<_,uuid::Uuid>(
+        "UPDATE api_tokens SET last_used_at=NOW() WHERE token_hash=$1 RETURNING user_id")
         .bind(hash_token(supplied)).fetch_optional(db).await
-        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.map(Some).ok_or(StatusCode::UNAUTHORIZED)
+        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)? {
+        return Ok(Some(user_id));
+    }
+    // Uma sessão de login válida também autentica as APIs de projetos.
+    // Isso permite recuperar os projetos após reinstalar o app, mesmo que
+    // o token local do Android tenha sido apagado junto com o aplicativo.
+    sqlx::query_scalar::<_,uuid::Uuid>(
+        "SELECT user_id FROM auth_sessions WHERE token_hash=$1 AND expires_at>NOW()")
+        .bind(hash_token(supplied)).fetch_optional(db).await
+        .map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?
+        .map(Some).ok_or(StatusCode::UNAUTHORIZED)
 }
 async fn list_projects(State(state):State<AppState>,headers:HeaderMap)->Result<Json<Vec<Project>>,StatusCode>{
     let owner=authorize(&state,&headers).await?;
