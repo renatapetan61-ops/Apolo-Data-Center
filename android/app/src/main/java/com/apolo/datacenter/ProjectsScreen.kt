@@ -136,6 +136,49 @@ internal fun ProjectsScreen(
                 Text(p.description,color=Color(0xFF9BAEC8),fontSize=12.sp)
                 if(busy)LinearProgressIndicator(Modifier.fillMaxWidth())
             }
+            // O projeto abre diretamente no laboratório de criação com Kimi.
+            item {
+                Text("CHAT DE ENGENHARIA · KIMI K3.1 PRO",color=Color(0xFF78A9FF),fontWeight=FontWeight.Bold,fontSize=12.sp)
+                Text(assistantOutput,color=Color(0xFFEAF1FC),fontSize=13.sp)
+                OutlinedTextField(assistantInput,{assistantInput=it},modifier=Modifier.fillMaxWidth(),label={Text("Descreva o LLM que deseja criar do zero")},minLines=4)
+                Button(onClick={
+                    val q=assistantInput.trim()
+                    if(q.isNotEmpty()){
+                        val history=org.json.JSONArray().apply {
+                            assistantHistory.takeLast(30).forEach { (role, content) ->
+                                put(JSONObject().put("role",role).put("content",content))
+                            }
+                        }
+                        val payload=JSONObject().put("message",q).put("history",history).toString()
+                        assistantInput="";busy=true;message="Enviando seu prompt ao Kimi K3.1 Pro…"
+                        onWorkspaceAction(p.id,"CHAT",payload,""){r->
+                            r.onSuccess{answer->
+                                assistantOutput=answer
+                                assistantHistory=(assistantHistory+("user" to q)+("assistant" to answer)).takeLast(30)
+                                message="Kimi respondeu. Gerando agora os arquivos iniciais do LLM…"
+                                val generatedName=modelName.ifBlank { "${p.name} LLM" }
+                                onWorkspaceAction(p.id,"MODEL",generatedName,parameters+"\n"+q+"\n\nProjeto técnico definido pelo Kimi:\n"+answer){generated->
+                                    busy=false
+                                    generated.onSuccess{
+                                        assistantOutput=answer+"\n\n[APOLO] Estrutura inicial do LLM gerada e salva no projeto. Isso é código-fonte inicial, não um modelo já treinado."
+                                        message="Arquivos iniciais do LLM salvos. Configure um dataset e worker para iniciar treinamento."
+                                        refreshWorkspace(p)
+                                    }.onFailure{err->
+                                        message=err.message?:"Falha ao gerar os arquivos do LLM."
+                                        assistantOutput=answer+"\n\n[APOLO] A resposta do Kimi foi recebida, mas a geração dos arquivos falhou: "+message
+                                    }
+                                }
+                            }.onFailure{err->
+                                busy=false;assistantOutput=err.message?:"Falha ao enviar o prompt ao Kimi/NVIDIA NIM."
+                                message=assistantOutput
+                            }
+                        }
+                    }
+                },enabled=assistantInput.isNotBlank()&&!busy,modifier=Modifier.fillMaxWidth()){
+                    Text(if(busy)"Processando…" else "Enviar prompt e criar LLM")
+                }
+                Text("Ao enviar, o backend consulta o Kimi via NVIDIA NIM e tenta gerar model.py, train.py, configuração e README. O treino só começa após preparar dados e conectar um worker compatível.",color=Color(0xFF9BAEC8),fontSize=11.sp)
+            }
             item {
                 Text("ARQUIVOS E DATASETS",color=Color(0xFF78A9FF),fontWeight=FontWeight.Bold,fontSize=11.sp)
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -161,29 +204,6 @@ internal fun ProjectsScreen(
                 },enabled=modelName.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("Gerar arquivos do LLM com Kimi")}
                 models.forEach { model -> Text("• "+model.optString("name")+" · "+model.optString("architecture")+" · "+model.optString("status"),color=Color(0xFFEAF1FC),fontSize=12.sp) }
             }
-            item {
-                Text("ASSISTENTE KIMI · NVIDIA NIM",color=Color(0xFF78A9FF),fontWeight=FontWeight.Bold,fontSize=11.sp)
-                Text(assistantOutput,color=Color(0xFFEAF1FC),fontSize=12.sp)
-                OutlinedTextField(assistantInput,{assistantInput=it},modifier=Modifier.fillMaxWidth(),label={Text("Descreva o LLM que deseja criar")},minLines=3)
-                Button(onClick={
-                    val q=assistantInput.trim()
-                    val history=org.json.JSONArray().apply {
-                        assistantHistory.takeLast(30).forEach { (role, content) ->
-                            put(JSONObject().put("role",role).put("content",content))
-                        }
-                    }
-                    val payload=JSONObject().put("message",q).put("history",history).toString()
-                    assistantInput="";busy=true
-                    onWorkspaceAction(p.id,"CHAT",payload,""){r->
-                        busy=false
-                        r.onSuccess{
-                            assistantOutput=it
-                            assistantHistory=(assistantHistory+("user" to q)+("assistant" to it)).takeLast(30)
-                        }.onFailure{assistantOutput=it.message?:"Falha no Kimi/NVIDIA NIM."}
-                    }
-                },enabled=assistantInput.isNotBlank()&&!busy,modifier=Modifier.fillMaxWidth()){Text("Enviar para Kimi K3.1 Pro")}
-            }
-
             item {
                 Text("APOLO VTA · ACELERADOR VIRTUAL",color=Color(0xFF78A9FF),fontWeight=FontWeight.Bold,fontSize=11.sp)
                 Text("Planeja o uso combinado de memória e aceleradores dos workers reais. Não cria hardware nem inventa FLOPS.",color=Color(0xFF9BAEC8),fontSize=11.sp)
