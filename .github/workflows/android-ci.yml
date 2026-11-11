@@ -38,7 +38,7 @@ jobs:
       - name: Read app version
         id: app-version
         run: |
-          VERSION_NAME="$(sed -n 's/^[[:space:]]*versionName = "\\([^"]*\\)".*/\\1/p' android/app/build.gradle.kts | head -n 1)"
+          VERSION_NAME="$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)"
           test -n "$VERSION_NAME"
           echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
       - name: Build debug APK
