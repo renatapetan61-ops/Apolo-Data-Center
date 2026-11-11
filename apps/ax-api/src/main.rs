@@ -15,6 +15,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::{env, net::SocketAddr, sync::Arc};
 use subtle::ConstantTimeEq;
 mod workspace;
+mod vta2;
 use time::{Duration, OffsetDateTime};
 
 #[derive(Clone)]
@@ -209,7 +210,7 @@ fn app(state:AppState)->Router{
         .route("/api/v1/tokens",post(create_api_token).get(get_active_api_token))
         .route("/api/v1/projects",get(list_projects).post(create_project))
         .route("/api/v1/projects/{project_id}",delete(delete_project))
-        .merge(workspace::router()).with_state(state)
+        .merge(workspace::router()).merge(vta2::router()).with_state(state)
 }
 #[tokio::main]
 async fn main()->Result<(),Box<dyn std::error::Error>>{
