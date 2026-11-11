@@ -264,21 +264,63 @@ async fn list_models(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:Heade
  let rows=sqlx::query_as::<_,ModelRow>("SELECT id,name,architecture,parameters,config,status,created_at FROM project_models WHERE project_id=$1 AND ($2::uuid IS NULL OR user_id=$2) ORDER BY created_at DESC")
  .bind(pid).bind(owner).fetch_all(database(&s)?).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?; Ok(Json(rows))
 }
+async fn nim_response_payload(response: reqwest::Response) -> Result<(u16, serde_json::Value), StatusCode> {
+ let code=response.status().as_u16();
+ let body=response.text().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
+ let value=serde_json::from_str(&body).unwrap_or_else(|_|serde_json::json!({"raw":body.chars().take(1200).collect::<String>()}));
+ Ok((code,value))
+}
+fn nim_extract_content(code:u16,value:&serde_json::Value)->Result<String,StatusCode>{
+ if !(200..300).contains(&code){
+  let detail=value.to_string();
+  eprintln!("NVIDIA NIM returned HTTP {code}: {}",detail.chars().take(1200).collect::<String>());
+  return Err(match code {429=>StatusCode::TOO_MANY_REQUESTS,401|403|404|422=>StatusCode::FAILED_DEPENDENCY,408|504=>StatusCode::GATEWAY_TIMEOUT,_=>StatusCode::BAD_GATEWAY});
+ }
+ value.pointer("/choices/0/message/content").and_then(|v|v.as_str()).map(str::to_owned).ok_or_else(||{
+  eprintln!("NVIDIA NIM HTTP {code} returned no choices[0].message.content: {}",value.to_string().chars().take(1200).collect::<String>());
+  StatusCode::BAD_GATEWAY
+ })
+}
+async fn nim_chat_completion(model:&str,messages:serde_json::Value,temperature:f64,reasoning_effort:&str,max_tokens:u32,timeout_secs:u64)->Result<String,StatusCode>{
+ let key=env::var("NVIDIA_NIM_API_KEY").map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
+ // Para modelos servidos por Partner Endpoint/NIM dedicado, informe a URL base em NVIDIA_NIM_BASE_URL.
+ // O endpoint publico integrate.api.nvidia.com so funciona para modelos liberados para acesso programatico.
+ let base=env::var("NVIDIA_NIM_BASE_URL").unwrap_or_else(|_|"https://integrate.api.nvidia.com/v1".into());
+ let base=base.trim().trim_end_matches('/');
+ if !(base.starts_with("https://")||base.starts_with("http://127.0.0.1")||base.starts_with("http://localhost")){
+  eprintln!("NVIDIA_NIM_BASE_URL must use HTTPS for remote endpoints");
+  return Err(StatusCode::INTERNAL_SERVER_ERROR);
+ }
+ let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(timeout_secs)).build().map_err(|_|StatusCode::BAD_GATEWAY)?;
+ let endpoint=format!("{base}/chat/completions");
+ let response=client.post(&endpoint).bearer_auth(&key)
+  .json(&serde_json::json!({"model":model,"messages":messages,"temperature":temperature,"reasoning_effort":reasoning_effort,"max_tokens":max_tokens}))
+  .send().await.map_err(|err|{eprintln!("NVIDIA NIM request failed: {err}");StatusCode::BAD_GATEWAY})?;
+ let (mut code,mut value)=nim_response_payload(response).await?;
+ if code==202 {
+  let request_id=value.get("requestId").or_else(||value.get("request_id")).and_then(|v|v.as_str()).ok_or_else(||{
+   eprintln!("NVIDIA NIM returned HTTP 202 without requestId");
+   StatusCode::BAD_GATEWAY
+  })?.to_owned();
+  for _ in 0..90 {
+   tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+   let poll=client.get(format!("{base}/status/{request_id}")).bearer_auth(&key).send().await
+    .map_err(|err|{eprintln!("NVIDIA NIM status polling failed: {err}");StatusCode::BAD_GATEWAY})?;
+   (code,value)=nim_response_payload(poll).await?;
+   if code!=202 { return nim_extract_content(code,&value); }
+  }
+  return Err(StatusCode::GATEWAY_TIMEOUT);
+ }
+ nim_extract_content(code,&value)
+}
 async fn kimi_chat(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderMap,Json(input):Json<ChatInput>)->Result<Json<serde_json::Value>,StatusCode>{
  let owner=authorize(&s,&headers).await?; owned_project(&s,&headers,pid).await?;
  if input.message.trim().is_empty()||input.message.len()>50000{return Err(StatusCode::BAD_REQUEST)}
- let key=env::var("NVIDIA_NIM_API_KEY").map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
  let model=env::var("NVIDIA_NIM_MODEL").unwrap_or_else(|_|"moonshotai/kimi-k3.1-pro".into());
- let mut messages=vec![ChatMessage{role:"system".into(),content:SYSTEM_PROMPT.into()}];
- messages.extend(input.history.into_iter().filter(|m|matches!(m.role.as_str(),"user"|"assistant")).take(30));
- messages.push(ChatMessage{role:"user".into(),content:input.message});
- let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build().map_err(|_|StatusCode::BAD_GATEWAY)?;
- let response=client.post("https://integrate.api.nvidia.com/v1/chat/completions").bearer_auth(key)
- .json(&serde_json::json!({"model":model,"messages":messages,"temperature":0.2,"reasoning_effort":"high","max_tokens":8192}))
- .send().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
- let status=response.status(); let value:serde_json::Value=response.json().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
- if !status.is_success(){eprintln!("NVIDIA NIM returned HTTP {status}: {}",value);return Err(if status.as_u16()==429{StatusCode::TOO_MANY_REQUESTS}else{StatusCode::BAD_GATEWAY})}
- let content=value.pointer("/choices/0/message/content").and_then(|v|v.as_str()).ok_or(StatusCode::BAD_GATEWAY)?;
+ let mut messages=vec![serde_json::json!({"role":"system","content":SYSTEM_PROMPT})];
+ messages.extend(input.history.into_iter().filter(|m|matches!(m.role.as_str(),"user"|"assistant")).take(30).map(|m|serde_json::json!({"role":m.role,"content":m.content})));
+ messages.push(serde_json::json!({"role":"user","content":input.message}));
+ let content=nim_chat_completion(&model,serde_json::Value::Array(messages),0.2,"high",8192,180).await?;
  let _=owner;
  Ok(Json(serde_json::json!({"model":model,"content":content,"system_prompt":"apolo-llm-engineer-v1"})))
 }
@@ -286,19 +328,16 @@ async fn kimi_chat(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderM
 async fn generate_model(State(s):State<AppState>,Path(pid):Path<Uuid>,headers:HeaderMap,Json(input):Json<GenerateInput>)->Result<(StatusCode,Json<serde_json::Value>),StatusCode>{
  let owner=authorize(&s,&headers).await?; owned_project(&s,&headers,pid).await?;
  if input.name.trim().is_empty()||input.name.len()>160||input.description.len()>30000||input.parameters.unwrap_or(0)<0{return Err(StatusCode::BAD_REQUEST)}
- let key=env::var("NVIDIA_NIM_API_KEY").map_err(|_|StatusCode::SERVICE_UNAVAILABLE)?;
  let model=env::var("NVIDIA_NIM_MODEL").unwrap_or_else(|_|"moonshotai/kimi-k3.1-pro".into());
  let request=format!("Crie os arquivos iniciais do LLM solicitado. Nome: {}. Parâmetros pretendidos: {:?}. Requisitos do usuário: {}. Retorne SOMENTE JSON válido com chaves model_config (objeto), model_py (código PyTorch), train_py (código Python executável), readme (texto). Gere decoder Transformer pequeno e funcional como scaffold se a escala não for viável. Não alegue modelo pré-treinado. O train_py deve aceitar os argumentos --data, --output, --epochs, --batch-size, --seq-len, --lr e --vocab-size; ler JSONL tokenizado com input_ids; usar AdamW, clipping, emitir linhas JSON com loss/step e salvar checkpoints em --output. Inclua limites e estimativa de recursos em readme.",input.name,input.parameters,input.description);
- let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(180)).build().map_err(|_|StatusCode::BAD_GATEWAY)?;
- let response=client.post("https://integrate.api.nvidia.com/v1/chat/completions").bearer_auth(key)
- .json(&serde_json::json!({"model":model,"messages":[{"role":"system","content":SYSTEM_PROMPT},{"role":"user","content":request}],"temperature":0.1,"reasoning_effort":"max","max_tokens":16000}))
- .send().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
- let status=response.status();let value:serde_json::Value=response.json().await.map_err(|_|StatusCode::BAD_GATEWAY)?;
- if !status.is_success(){eprintln!("NVIDIA NIM returned HTTP {status}: {}",value);return Err(if status.as_u16()==429{StatusCode::TOO_MANY_REQUESTS}else{StatusCode::BAD_GATEWAY})}
- let content=value.pointer("/choices/0/message/content").and_then(|v|v.as_str()).ok_or(StatusCode::BAD_GATEWAY)?.trim();
- let artifacts:serde_json::Value=serde_json::from_str(content).map_err(|_|StatusCode::BAD_GATEWAY)?;
- let model_py=artifacts.get("model_py").and_then(|v|v.as_str()).ok_or(StatusCode::BAD_GATEWAY)?;
- let train_py=artifacts.get("train_py").and_then(|v|v.as_str()).ok_or(StatusCode::BAD_GATEWAY)?;
+ let content=nim_chat_completion(&model,serde_json::json!([{"role":"system","content":SYSTEM_PROMPT},{"role":"user","content":request}]),0.1,"max",16000,240).await?;
+ let content=content.trim().trim_start_matches(char::from(96)).trim_start_matches("json").trim().trim_end_matches(char::from(96)).trim();
+ let artifacts:serde_json::Value=serde_json::from_str(content).map_err(|err|{
+  eprintln!("NVIDIA NIM returned non-JSON model scaffold: {err}");
+  StatusCode::UNPROCESSABLE_ENTITY
+ })?;
+ let model_py=artifacts.get("model_py").and_then(|v|v.as_str()).ok_or(StatusCode::UNPROCESSABLE_ENTITY)?;
+ let train_py=artifacts.get("train_py").and_then(|v|v.as_str()).ok_or(StatusCode::UNPROCESSABLE_ENTITY)?;
  let readme=artifacts.get("readme").and_then(|v|v.as_str()).unwrap_or("Scaffold gerado via NVIDIA NIM; nao e modelo pre-treinado.");
  let config=artifacts.get("model_config").cloned().unwrap_or_else(||serde_json::json!({"architecture":"transformer","framework":"pytorch"}));
  if model_py.len()>256000||train_py.len()>256000||readme.len()>64000{return Err(StatusCode::PAYLOAD_TOO_LARGE)}
